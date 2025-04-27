@@ -17,10 +17,21 @@
  
 ## Zasoby programistyczne
 https://pytorch.org/get-started/locally/#start-locally
+
 https://github.com/cudawarped/opencv-python-cuda-wheels/releases
+
+https://github.com/360ls/stitcher/blob/master/app/stitcher/core/stitcher.py#L79
 
 ## Zasoby dydaktyczne
 https://github.com/AtsushiSakai/PythonRobotics.git
+
+https://en.wikipedia.org/wiki/Tesla_Autopilot_hardware
+
+https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html
+
+https://research.google/blog/seamless-google-street-view-panoramas/
+
+https://www.cs.cornell.edu/courses/cs6670/2011sp/lectures/lec07_panoramas.pdf
 
 
  
