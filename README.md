@@ -1,5 +1,5 @@
 # webots_car_vision
-##Funkcjonalność projektu
+## Funkcjonalność projektu
 
  W danym projekcie realizuje się system percepcji samochodu autonomicznego, zawierający obsługę czujników ultradzwiękowych oraz układ z 6 kamer widoku 360°. 
 
@@ -15,9 +15,12 @@
 
  Repo zawiera pliki kontrolera oraz niezbędne pliki z macierzami przekształceń homograficnzych o rozszerzeniu .npy.
  
-##Zasoby programistyczne
+## Zasoby programistyczne
+https://pytorch.org/get-started/locally/#start-locally
+https://github.com/cudawarped/opencv-python-cuda-wheels/releases
 
-##Zasoby dydaktyczne
+## Zasoby dydaktyczne
+https://github.com/AtsushiSakai/PythonRobotics.git
 
 
  
