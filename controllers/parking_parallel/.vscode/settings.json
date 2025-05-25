@@ -1,0 +1,7 @@
+{
+    "git.ignoreLimitWarning": true,
+    "files.associations": {
+        "math.h": "c",
+        "driver.h": "c"
+    }
+}
