@@ -33,15 +33,3 @@ https://research.google/blog/seamless-google-street-view-panoramas/
 
 https://www.cs.cornell.edu/courses/cs6670/2011sp/lectures/lec07_panoramas.pdf
 
-## @ARTICLE{Webots04,
-  AUTHOR  = {Michel, O.},
-  TITLE   = {Webots: Professional Mobile Robot Simulation},
-  JOURNAL = {Journal of Advanced Robotics Systems},
-  YEAR    = {2004},
-  VOLUME  = {1},
-  NUMBER  = {1},
-  PAGES   = {39--42},
-  URL     = {http://www.ars-journal.com/International-Journal-of-
-             Advanced-Robotic-Systems/Volume-1/39-42.pdf}
-}
- 
