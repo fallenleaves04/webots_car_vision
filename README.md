@@ -33,3 +33,5 @@ https://research.google/blog/seamless-google-street-view-panoramas/
 
 https://www.cs.cornell.edu/courses/cs6670/2011sp/lectures/lec07_panoramas.pdf
 
+Michel, O. (2004). Webots: Professional Mobile Robot Simulation. _Journal of Advanced Robotics Systems_, 1(1), 39–42. [PDF](http://www.ars-journal.com/International-Journal-of-Advanced-Robotic-Systems/Volume-1/39-42.pdf)
+
