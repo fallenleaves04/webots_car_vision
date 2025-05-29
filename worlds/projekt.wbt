@@ -52,10 +52,10 @@ WorldInfo {
   ]
 }
 Viewpoint {
-  orientation 0.2156232468265572 0.11274150271394422 -0.9699463742876591 2.282181626166123
-  position -34.966152497365165 -28.670858551574476 7.2846306713742734
+  orientation -0.17084075590253622 0.1261388704531432 0.9771910874969415 1.853797917157401
+  position -68.04631807087095 -51.56404623076196 10.49998471230308
   near 3
-  follow "vehicle(8)"
+  follow "SAMOCHOD_TESTOWY"
   followType "Mounted Shot"
 }
 TexturedBackground {
@@ -530,7 +530,10 @@ Road {
     "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/road/protos/textures/road_line_triangle.png"
     "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/road/protos/textures/road_line_triangle.png"
   ]
-  splineSubdivision 0
+  splineSubdivision 5
+  roadBoundingObject TRUE
+  rightBorderBoundingObject TRUE
+  leftBorderBoundingObject TRUE
 }
 Road {
   translation -70.327999 -22.342201 0.01
@@ -1125,8 +1128,8 @@ Road {
   leftBorderBoundingObject TRUE
 }
 FifaSoccerBall {
-  hidden linearVelocity_0 0 0 -838.7157599996564
-  translation 55851788040.62426 6112457043.827436 24916150965.232044
+  hidden linearVelocity_0 0 0 -71.10288000000052
+  translation 55851788040.62426 6112457043.827436 24898779428.231937
   rotation -0.6685065306529323 0.6236170781600179 -0.4052169274617512 1.686622134690226
 }
 TeslaModel3Simple {
@@ -1720,35 +1723,37 @@ DEF parking Pose {
   ]
 }
 BmwX5 {
-  hidden position_0_0 0.07739810653175568
-  hidden position2_0_0 348.5163491908822
-  hidden position_0_1 0.08078699020795788
-  hidden position2_0_1 343.59868463192714
-  hidden position_0_2 349.6150431169523
-  hidden position_0_3 341.0990107332481
-  hidden position_0_8 0.8
-  hidden position_0_9 8.521214504696673e-07
-  hidden linearVelocity_0 -2.1744753684693307e-08 -1.917558382381168e-09 2.88202406882192e-08
-  hidden angularVelocity_0 3.194482141699221e-09 -1.5962273107000288e-08 1.6780628484239603e-09
-  hidden rotation_1 0.03868910181564114 0.9992437232527479 0.0038903651094658806 3.3418774383663137
-  hidden linearVelocity_1 3.034232632461841e-08 4.305353262897607e-08 4.584461649964411e-09
-  hidden angularVelocity_1 8.257491155800954e-09 6.080260260125631e-09 1.6535404315214431e-09
-  hidden rotation_2 0.04036822781640349 0.9988308743015043 0.02659493795923726 4.305603445621244
-  hidden linearVelocity_2 -4.380819865344685e-08 -2.8738106591489023e-08 1.1397187972665512e-10
-  hidden angularVelocity_2 6.856476821252282e-10 -3.8541830113764996e-08 1.6925455695251405e-09
-  hidden rotation_3 0 0.9999999999999999 0 2.243334085104564
-  hidden linearVelocity_3 -1.0404457589636306e-08 -1.0449081824014378e-08 2.4195573769788588e-08
-  hidden angularVelocity_3 2.8450012770556017e-09 -3.047644806102225e-08 1.790000987351317e-09
-  hidden rotation_4 0 1 0 1.8070041455504517
-  hidden linearVelocity_4 -1.3121961464670088e-08 -9.603143173503927e-09 3.675147602533551e-08
-  hidden angularVelocity_4 3.6790794264277968e-09 -3.742534153183294e-08 1.7909012820066086e-09
-  hidden rotation_62 0 -0.3205961743168832 0.9472159695726095 0.7999999999999999
-  hidden translation_63 -2.9106997745387275e-07 1.6893344257917775e-06 -3.2671120187011127e-07
-  hidden rotation_63 0.7466598432279095 0 -0.6652060421485012 8.523672608181953e-07
-  translation -40.63166561847341 -34.76143313147804 0.31846260811104665
-  rotation 0.002167178028326251 3.0437267808957868e-05 0.9999976512037247 -3.0372284291121723
+  hidden position_0_0 0.03957095837792004
+  hidden position2_0_0 415.78777860157237
+  hidden position_0_1 0.04044094593300062
+  hidden position2_0_1 410.91455420478997
+  hidden position_0_2 416.5765425210247
+  hidden position_0_3 408.04454394164924
+  hidden position_0_9 1.5503227245972085e-09
+  hidden linearVelocity_0 -1.0546709410372057e-05 2.3846409155557517e-05 0.00012443164662883646
+  hidden angularVelocity_0 1.402259627587931e-07 -5.273179290457716e-06 6.759797118884037e-07
+  hidden translation_1 0 0 0
+  hidden rotation_1 -0.019773839174437067 -0.9992812739951019 -0.03234085229286993 1.0981883952595792
+  hidden linearVelocity_1 -2.5562246329429524e-06 -1.2565037546001434e-06 9.663015359643378e-05
+  hidden angularVelocity_1 1.5228544661488909e-06 -7.788716489461505e-06 6.640949691497015e-07
+  hidden translation_2 0 0 0
+  hidden rotation_2 -0.0202186501626209 -0.9997735729443702 0.006633930030512531 3.775541921813325
+  hidden linearVelocity_2 -2.951601909899891e-06 -1.920278586189871e-07 8.99099251991872e-05
+  hidden angularVelocity_2 9.552132921847952e-07 -8.20161510600682e-06 6.631422054423866e-07
+  hidden translation_3 0 0 0
+  hidden rotation_3 0 -1 0 1.8863122471719842
+  hidden linearVelocity_3 -8.796061769562216e-07 -7.062653856123922e-08 6.831699255062787e-05
+  hidden angularVelocity_3 7.638598192489767e-08 -2.036173690251374e-06 6.907038315916755e-07
+  hidden translation_4 0 0 0
+  hidden rotation_4 0 1 0 5.920684282155704
+  hidden linearVelocity_4 -1.1773348921069016e-06 7.999586963693234e-07 0.00011147049344629273
+  hidden angularVelocity_4 -2.2254300457325356e-06 -2.905120283956439e-06 6.906646514692733e-07
+  hidden translation_63 -5.295683891404224e-10 3.0735207712240253e-09 -5.944095216037226e-10
+  hidden rotation_63 0.7466598432279096 0 -0.6652060421485012 0
+  translation -73.62639274783461 -23.502519295411663 0.3178466718528389
+  rotation 0.002171448884675771 -0.001579210898679907 0.999996395444843 1.9130246833641695
   color 0.654902 0.654902 0.654902
-  name "vehicle(8)"
+  name "SAMOCHOD_TESTOWY"
   controller "parking_parallel_new"
   supervisor TRUE
   sensorsSlotFront [
@@ -2193,7 +2198,6 @@ BmwX5 {
           ]
           filtering 5
         }
-        transparency 1
         roughness 1
         metalness 0
         IBLStrength 3
@@ -2212,7 +2216,6 @@ BmwX5 {
           ]
           filtering 5
         }
-        transparency 1
         roughness 1
         metalness 0
         IBLStrength 3
@@ -2231,7 +2234,6 @@ BmwX5 {
           ]
           filtering 5
         }
-        transparency 1
         roughness 1
         metalness 0
         IBLStrength 3
@@ -2250,7 +2252,6 @@ BmwX5 {
           ]
           filtering 5
         }
-        transparency 1
         roughness 1
         metalness 0
         IBLStrength 3
@@ -2286,6 +2287,7 @@ BmwX5 {
           ]
           filtering 5
         }
+        transparency 1
         roughness 1
         metalness 0
         IBLStrength 3
@@ -2303,6 +2305,7 @@ BmwX5 {
           ]
           filtering 5
         }
+        transparency 1
         roughness 1
         metalness 0
         IBLStrength 0

@@ -28,12 +28,12 @@ class Parking:
         self.min_width = min_width
         self.min_length = min_length
         self.threshold = threshold
-        
+
         self.state = "searching_start"
         self.start_pose = None
         self.spots = []
         self.driver = driver
-        
+
         self.prev_distance_front = 0.0
         self.prev_distance_rear = 0.0
         self.side = side
@@ -41,15 +41,15 @@ class Parking:
         self.y = 0.0
         self.yaw = 0.0
         self.last_time = times
-        
-        
+
+
         self.Kp = 1.2
         self.Kd = 0.001
         self.Kl = 0.5
         self.prev_yaw_err = 0.0
     def update_odometry(self,yaw):
         # prędkość w m/s
-        
+
 
         # prędkość [m/s]
         v = self.driver.getCurrentSpeed() / 3.6
@@ -64,7 +64,7 @@ class Parking:
         # debug
         #print(f"v={v:.2f}m/s → dx={dx:.2f}, dy={dy:.2f} | x={self.x:.2f}, y={self.y:.2f}")
         return (self.x, self.y, self.yaw)
-        
+
     def update_state(self, dists_names,yaw):
         if self.side == "left":
             distance_front = dists_names["distance sensor left front side"]
@@ -80,14 +80,14 @@ class Parking:
             delta_rear = distance_rear - self.prev_distance_rear
             self.prev_distance_front = distance_front
             self.prev_distance_rear = distance_rear
-          
-        
+
+
         odom_pose = self.update_odometry(yaw)
         # projekcja punktu bocznego na mapę
         x, y, yaw = odom_pose
-        #print(f"wsp. x: {x:.2f}, wsp. y: {y:.2f}, skret: {yaw:.2f}")      
+        #print(f"wsp. x: {x:.2f}, wsp. y: {y:.2f}, skret: {yaw:.2f}")
         if self.state == "searching_start":
-            
+
             # czy odległość gwałtownie spadła?
             if delta_front > self.threshold:
                 # zapamiętujemy początek miejsca
@@ -108,27 +108,27 @@ class Parking:
                     #self.exec_path(odom_pose,spot,distance_front)
                 elif spot is None:
                     print("Miejsce okazało się za małe.")
-                    
+
                     self.state = "searching_start"
-                    
+
                 # resetujemy do kolejnej detekcji
-               
+
     def exec_path(self, curr_pose, end_pose, lateral_dist):
         # curr_pose = (x, y, yaw), end_pose = (x_end,y_end,yaw_end)
         x, y, yaw = curr_pose
         x_e, y_e, yaw_e = end_pose
-    
+
         # Kąt do mety
         target_yaw = math.atan2(y_e - y, x_e - x)
         yaw_err = normalize_angle(target_yaw - yaw)
-    
+
         # odległość do mety
         dist_forward = math.hypot(x_e - x, y_e - y)
-    
-        
+
+
         steer = self.Kp*yaw_err + self.Kd*(yaw_err - self.prev_yaw_err)
         self.prev_yaw_err = yaw_err
-    
+
         self.driver.setSteeringAngle(steer)
         # self.driver.setCruisingSpeed(min(dist_forward*0.5, MAX_SPEED))
         self.driver.setCruisingSpeed(MAX_SPEED)
@@ -149,7 +149,7 @@ class Parking:
 
         # wektor kierunku boku pojazdu (prostopadły do osi long.)
         # heading = kąt podłużnej osi pojazdu od osi X
-        
+
         dx = math.cos(yaw0 + math.pi/2)
         dy = math.sin(yaw0 + math.pi/2)
 
@@ -160,7 +160,7 @@ class Parking:
         # długość wzdłuż ruchu pojazdu
         length = math.hypot(x1 - x0, y1 - y0)
         if length < self.min_length:
-            
+
             return None
         p_start
         return (p_start, p_end)
@@ -184,7 +184,7 @@ class LivePlotter:
         self.val = 0.0
     def update(self, frame):
         # Tu pobierasz dane z czujnika — zastąp ten fragment swoim odczytem!
-        sensor_value = self.val          
+        sensor_value = self.val
         self.data.append(sensor_value)
         if len(self.data) > self.max_points:
             self.data.pop(0)
@@ -196,7 +196,7 @@ class LivePlotter:
         self.ax.set_ylim(min(ydata) - 1, max(ydata) + 1)
         return (self.line,)
 
-    
+
     def run(self):
         ani = animation.FuncAnimation(self.fig, self.update,interval=100, blit=True)
-        plt.show()    
+        plt.show()
