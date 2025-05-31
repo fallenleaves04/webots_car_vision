@@ -1,0 +1,611 @@
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">cv2</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">controller</span> <span class="kn">import</span> <span class="p">(</span><span class="n">Robot</span><span class="p">,</span> <span class="n">Camera</span><span class="p">,</span>
+<span class="n">GPS</span><span class="p">,</span> <span class="n">Keyboard</span><span class="p">,</span> <span class="n">DistanceSensor</span><span class="p">,</span>
+<span class="n">Gyro</span><span class="p">,</span> <span class="n">InertialUnit</span><span class="p">,</span> <span class="n">Supervisor</span><span class="p">,</span>
+<span class="n">Display</span><span class="p">)</span>
+<span class="kn">from</span> <span class="nn">vehicle</span> <span class="kn">import</span> <span class="n">Driver</span>
+<span class="c1">#from transformers import AutoImageProcessor, AutoModelForDepthEstimation</span>
+<span class="c1">#from transformers import DepthProImageProcessorFast, DepthProForDepthEstimation</span>
+<span class="c1">#import torch._dynamo</span>
+<span class="c1">#torch._dynamo.config.suppress_errors = True</span>
+<span class="c1">#import torch</span>
+<span class="c1">#import torchvision.transforms as T</span>
+
+<span class="kn">import</span> <span class="nn">visualise</span> <span class="k">as</span> <span class="nn">vis</span>
+<span class="kn">import</span> <span class="nn">camera_calibration</span> <span class="k">as</span> <span class="nn">cc</span>
+<span class="kn">import</span> <span class="nn">park_algo</span> <span class="k">as</span> <span class="nn">palg</span>
+<span class="kn">import</span> <span class="nn">stereo_yolo</span> <span class="k">as</span> <span class="nn">sy</span>
+<span class="kn">from</span> <span class="nn">ultralytics</span> <span class="kn">import</span> <span class="n">YOLO</span>
+
+<span class="c1">#from scipy.interpolate import splprep, splev</span>
+<span class="c1">#from scipy.ndimage import uniform_filter1d</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">matplotlib._pylab_helpers</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">threading</span><span class="o">,</span> <span class="nn">queue</span>
+
+<span class="c1"># --------------------- Stałe ---------------------</span>
+<span class="n">TIME_STEP</span> <span class="o">=</span> <span class="mi">80</span>
+<span class="n">NUM_DIST_SENSORS</span> <span class="o">=</span> <span class="mi">12</span>
+<span class="n">NUM_CAMERAS</span> <span class="o">=</span> <span class="mi">8</span>
+<span class="n">MAX_SPEED</span> <span class="o">=</span> <span class="mf">250.0</span>
+<span class="n">CAMERA_HEIGHT</span><span class="o">=</span><span class="mi">2160</span>
+<span class="n">CAMERA_WIDTH</span><span class="o">=</span><span class="mi">3840</span>
+<span class="k">global</span> <span class="n">parking</span>
+
+<span class="n">SENSOR_INTERVAL</span> <span class="o">=</span> <span class="mf">0.06</span>
+<span class="n">IMAGE_INTERVAL</span>  <span class="o">=</span> <span class="mf">0.15</span>
+<span class="n">KEYBOARD_INTERVAL</span> <span class="o">=</span> <span class="mf">0.04</span>
+
+<span class="c1"># Parametry samochodu, charakterystyki z symulatora</span>
+<span class="n">TRACK_FRONT</span> <span class="o">=</span> <span class="mf">1.628</span>
+<span class="n">TRACK_REAR</span> <span class="o">=</span> <span class="mf">1.628</span>
+<span class="n">WHEELBASE</span> <span class="o">=</span> <span class="mf">2.995</span>
+<span class="n">MAX_WHEEL_ANGLE</span> <span class="o">=</span> <span class="mf">0.5</span>  <span class="c1"># rad</span>
+<span class="n">CAR_WIDTH</span> <span class="o">=</span> <span class="mf">2.302</span>
+<span class="n">CAR_LENGTH</span> <span class="o">=</span> <span class="mf">4.85</span>
+
+<span class="c1"># --------------------- Zmienne globalne ---------------------</span>
+
+<span class="n">driver</span> <span class="o">=</span> <span class="n">Driver</span><span class="p">()</span>
+
+<span class="c1">#robot = Robot()</span>
+<span class="c1">#supervisor = Supervisor()</span>
+<span class="n">display</span> <span class="o">=</span> <span class="n">Display</span><span class="p">(</span><span class="s1">&#39;display&#39;</span><span class="p">)</span>
+<span class="n">keyboard</span> <span class="o">=</span> <span class="n">Keyboard</span><span class="p">()</span>
+<span class="n">keyboard</span><span class="o">.</span><span class="n">enable</span><span class="p">(</span><span class="n">TIME_STEP</span><span class="p">)</span>
+<span class="n">gps</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">Driver</span><span class="o">.</span><span class="n">synchronization</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="n">cameras</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">driver</span><span class="o">.</span><span class="n">synchronization</span><span class="p">)</span>
+<span class="n">camera_names</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="n">cam_matrices</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">images</span> <span class="o">=</span><span class="p">[]</span>
+<span class="n">distance_sensors</span> <span class="o">=</span> <span class="p">[]</span>
+
+<span class="n">speed</span> <span class="o">=</span> <span class="mf">0.0</span>
+<span class="n">steering_angle</span> <span class="o">=</span> <span class="mf">0.0</span>
+<span class="n">manual_steering</span> <span class="o">=</span> <span class="mi">0</span>
+
+<span class="n">previous_error</span> <span class="o">=</span> <span class="mf">0.0</span>
+<span class="n">integral</span> <span class="o">=</span> <span class="mf">0.0</span>
+<span class="n">homography_matrices</span> <span class="o">=</span> <span class="p">{}</span>
+
+
+
+<span class="c1"># --------------------- Helper Functions ---------------------</span>
+<span class="k">def</span> <span class="nf">print_help</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Samochód teraz jeździ.&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Proszę użyć klawiszy UP/DOWN dla zwiększenia prędkości lub LEFT/RIGHT dla skrętu&quot;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">set_speed</span><span class="p">(</span><span class="n">kmh</span><span class="p">):</span>
+    <span class="k">global</span> <span class="n">speed</span>
+    <span class="n">speed</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">kmh</span><span class="p">,</span> <span class="n">MAX_SPEED</span><span class="p">)</span>
+    <span class="n">driver</span><span class="o">.</span><span class="n">setCruisingSpeed</span><span class="p">(</span><span class="n">speed</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Ustawiono prędkość </span><span class="si">{</span><span class="n">speed</span><span class="si">}</span><span class="s2"> km/h&quot;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">set_steering_angle</span><span class="p">(</span><span class="n">wheel_angle</span><span class="p">):</span>
+    <span class="k">global</span> <span class="n">steering_angle</span>
+    <span class="c1"># Clamp steering angle to [-0.5, 0.5] radians (per vehicle constraints)</span>
+    <span class="n">wheel_angle</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">wheel_angle</span><span class="p">,</span> <span class="n">MAX_WHEEL_ANGLE</span><span class="p">),</span> <span class="o">-</span><span class="n">MAX_WHEEL_ANGLE</span><span class="p">)</span>
+    <span class="n">steering_angle</span> <span class="o">=</span> <span class="n">wheel_angle</span>
+    <span class="n">driver</span><span class="o">.</span><span class="n">setSteeringAngle</span><span class="p">(</span><span class="n">steering_angle</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Skręcam </span><span class="si">{</span><span class="n">steering_angle</span><span class="si">}</span><span class="s2"> rad&quot;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">change_manual_steering_angle</span><span class="p">(</span><span class="n">inc</span><span class="p">):</span>
+    <span class="k">global</span> <span class="n">manual_steering</span>
+    <span class="n">new_manual_steering</span> <span class="o">=</span> <span class="n">manual_steering</span> <span class="o">+</span> <span class="n">inc</span>
+    <span class="k">if</span> <span class="o">-</span><span class="mf">25.0</span> <span class="o">&lt;=</span> <span class="n">new_manual_steering</span> <span class="o">&lt;=</span> <span class="mf">25.0</span><span class="p">:</span>
+        <span class="n">manual_steering</span> <span class="o">=</span> <span class="n">new_manual_steering</span>
+        <span class="n">set_steering_angle</span><span class="p">(</span><span class="n">manual_steering</span> <span class="o">*</span> <span class="mf">0.02</span><span class="p">)</span>
+
+
+
+<span class="c1">#----------------------Sensor functions-----------------</span>
+
+<span class="n">camera_names</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s2">&quot;camera_front_bumper_wide&quot;</span><span class="p">,</span><span class="s2">&quot;camera_rear&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;camera_left_fender&quot;</span><span class="p">,</span> <span class="s2">&quot;camera_right_fender&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;camera_left_pillar&quot;</span><span class="p">,</span>  <span class="s2">&quot;camera_right_pillar&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;camera_front_top&quot;</span><span class="p">,</span> <span class="s2">&quot;camera_front_top_add&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;camera_helper&quot;</span>
+    <span class="p">]</span>
+    
+<span class="k">def</span> <span class="nf">get_camera_image</span><span class="p">(</span><span class="n">camera</span><span class="p">):</span>
+    <span class="n">width</span> <span class="o">=</span> <span class="n">camera</span><span class="o">.</span><span class="n">getWidth</span><span class="p">()</span>
+    <span class="n">height</span> <span class="o">=</span> <span class="n">camera</span><span class="o">.</span><span class="n">getHeight</span><span class="p">()</span>
+    <span class="n">img</span> <span class="o">=</span> <span class="n">camera</span><span class="o">.</span><span class="n">getImage</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">img</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="n">img_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">frombuffer</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">height</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="mi">4</span><span class="p">))[:,</span> <span class="p">:,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+    <span class="n">img_array</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">img_array</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_BGR2RGB</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">img_array</span>
+
+<span class="n">sensor_names</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s2">&quot;distance sensor left front side&quot;</span><span class="p">,</span> <span class="s2">&quot;distance sensor front left&quot;</span><span class="p">,</span> <span class="s2">&quot;distance sensor front lefter&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;distance sensor front righter&quot;</span><span class="p">,</span> <span class="s2">&quot;distance sensor front right&quot;</span><span class="p">,</span> <span class="s2">&quot;distance sensor right front side&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;distance sensor left side&quot;</span><span class="p">,</span> <span class="s2">&quot;distance sensor left&quot;</span><span class="p">,</span> <span class="s2">&quot;distance sensor lefter&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;distance sensor righter&quot;</span><span class="p">,</span> <span class="s2">&quot;distance sensor right&quot;</span><span class="p">,</span> <span class="s2">&quot;distance sensor right side&quot;</span>
+    <span class="p">]</span>
+    
+<span class="k">def</span> <span class="nf">process_distance_sensors</span><span class="p">(</span><span class="n">sen</span><span class="p">):</span>
+    <span class="n">l_dist</span> <span class="o">=</span> <span class="n">sen</span><span class="o">.</span><span class="n">getLookupTable</span><span class="p">()</span>
+    <span class="n">a_dist</span> <span class="o">=</span> <span class="p">(</span><span class="n">l_dist</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="n">l_dist</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span><span class="o">/</span><span class="p">(</span><span class="n">l_dist</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="n">l_dist</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+    <span class="n">b_dist</span> <span class="o">=</span> <span class="n">l_dist</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">-</span><span class="n">l_dist</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span><span class="o">*</span><span class="n">a_dist</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="n">sen</span><span class="o">.</span><span class="n">getValue</span><span class="p">()</span>
+    <span class="n">distance</span> <span class="o">=</span> <span class="n">a_dist</span><span class="o">*</span><span class="n">value</span><span class="o">+</span><span class="n">b_dist</span>
+    <span class="n">sigma</span> <span class="o">=</span> <span class="n">l_dist</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">noisy_distance</span> <span class="o">=</span> <span class="n">distance</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">sigma</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">noisy_distance</span>
+<span class="w">        </span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">def parker_to_main(ax,fig,first):</span>
+<span class="sd">    </span>
+<span class="sd">    </span>
+<span class="sd">    #Funkcja działa tak, że</span>
+<span class="sd">    </span>
+<span class="sd">    dists = [process_distance_sensors(s) for s in distance_sensors]</span>
+<span class="sd">    names_dists = dict(zip(sensor_names,dists))</span>
+<span class="sd">    plt.ion()</span>
+<span class="sd">    fig.show()</span>
+
+
+<span class="sd">    vis.draw_cones(ax,fig,dists)</span>
+
+
+<span class="sd">    times = time.time()</span>
+<span class="sd">    # inicjalizacja parkingu raz</span>
+<span class="sd">    if first:</span>
+<span class="sd">        plotter = palg.LivePlotter()</span>
+<span class="sd">        parker = palg.Parking(driver,&quot;left&quot;,times)</span>
+<span class="sd">        yaw_init = imu.getRollPitchYaw()[2]</span>
+<span class="sd">        #first = False</span>
+
+<span class="sd">    plotter.update(0)</span>
+<span class="sd">    plotter.val = names_dists[&quot;distance sensor left front side&quot;]</span>
+
+<span class="sd">    #plotter.run()</span>
+<span class="sd">    yaw = imu.getRollPitchYaw()[2]-yaw_init</span>
+<span class="sd">    #print(yaw)</span>
+<span class="sd">    parker.update_state(names_dists, yaw)</span>
+<span class="sd">    if parker.state == &quot;waiting_for_park&quot;:</span>
+<span class="sd">        odom_pose,spot = parker.update_state(names_dists, yaw)</span>
+<span class="sd">        parker.exec_path(odom_pose,spot,names_dists[&quot;distance sensor front left side&quot;])</span>
+
+<span class="sd">    #images = [get_camera_image(c) for c in cameras]</span>
+<span class="sd">    #names_images = dict(zip(camera_names, images))</span>
+<span class="sd">    #img_right = names_images[&quot;camera_front_top&quot;]</span>
+<span class="sd">    #img_left = names_images[&quot;camera_front_top_add&quot;]</span>
+<span class="sd">    #cv2.imwrite(&quot;jakis2.png&quot;,cv2.cvtColor(img_left, cv2.COLOR_BGR2RGB))</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="k">def</span> <span class="nf">images_to_main</span><span class="p">():</span>
+    <span class="k">if</span> <span class="n">parking</span><span class="p">:</span>
+        <span class="n">images</span> <span class="o">=</span> <span class="p">[</span><span class="n">get_camera_image</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">cameras</span><span class="p">]</span>
+        <span class="n">names_images</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">camera_names</span><span class="p">,</span> <span class="n">images</span><span class="p">))</span>
+        <span class="n">img_right</span> <span class="o">=</span> <span class="n">names_images</span><span class="p">[</span><span class="n">name_right</span><span class="p">]</span>
+        <span class="n">img_left</span> <span class="o">=</span> <span class="n">names_images</span><span class="p">[</span><span class="n">name_left</span><span class="p">]</span>
+        <span class="n">right_copy</span> <span class="o">=</span> <span class="n">img_right</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">img_right</span><span class="p">,</span><span class="n">half</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">device</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span><span class="n">classes</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">5</span><span class="p">,</span><span class="mi">7</span><span class="p">,</span><span class="mi">10</span><span class="p">],</span><span class="n">conf</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span><span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">imgsz</span><span class="o">=</span><span class="p">(</span><span class="mi">1280</span><span class="p">,</span><span class="mi">960</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">results</span> <span class="ow">and</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">masks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+
+            <span class="n">K_right</span> <span class="o">=</span> <span class="n">cam_matrices</span><span class="p">[</span><span class="n">name_right</span><span class="p">]</span>
+            <span class="n">K_left</span> <span class="o">=</span> <span class="n">cam_matrices</span><span class="p">[</span><span class="n">name_left</span><span class="p">]</span>
+            <span class="n">f_left</span> <span class="o">=</span> <span class="n">K_left</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">f_right</span> <span class="o">=</span> <span class="n">K_right</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+            <span class="c1"># Zamień na grayscale</span>
+
+            <span class="n">grayL</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">img_left</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_BGR2GRAY</span><span class="p">)</span>
+            <span class="n">grayR</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">img_right</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_BGR2GRAY</span><span class="p">)</span>
+
+
+            <span class="c1">#TUTAJ DALEJ ODFILTROWANE DISPARITY</span>
+            <span class="c1"># oblicz disparity z lewej i prawej kamery</span>
+            <span class="n">disp_left</span> <span class="o">=</span> <span class="n">stereo_left</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">grayL</span><span class="p">,</span> <span class="n">grayR</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span> <span class="o">/</span> <span class="mf">16.0</span>
+            <span class="n">disp_right</span> <span class="o">=</span> <span class="n">stereo_right</span><span class="o">.</span><span class="n">compute</span><span class="p">(</span><span class="n">grayR</span><span class="p">,</span> <span class="n">grayL</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span> <span class="o">/</span> <span class="mf">16.0</span>
+
+            <span class="c1"># utwórz filtr WLS</span>
+            <span class="n">wls_filter</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">ximgproc</span><span class="o">.</span><span class="n">createDisparityWLSFilter</span><span class="p">(</span><span class="n">matcher_left</span><span class="o">=</span><span class="n">stereo_left</span><span class="p">)</span>
+            <span class="n">wls_filter</span><span class="o">.</span><span class="n">setLambda</span><span class="p">(</span><span class="mi">8000</span><span class="p">)</span>
+            <span class="n">wls_filter</span><span class="o">.</span><span class="n">setSigmaColor</span><span class="p">(</span><span class="mf">1.9</span><span class="p">)</span>
+
+            <span class="c1"># filtruj disparity</span>
+            <span class="n">filtered_disp</span> <span class="o">=</span> <span class="n">wls_filter</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">disp_left</span><span class="p">,</span> <span class="n">grayL</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">disp_right</span><span class="p">)</span>
+
+            <span class="n">disp_vis</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="n">filtered_disp</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">NORM_MINMAX</span><span class="p">)</span>
+            <span class="n">disp_vis</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">disp_vis</span><span class="p">,</span> <span class="n">nan</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">posinf</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">neginf</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+            <span class="n">disp_vis</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">(</span><span class="n">disp_vis</span><span class="p">)</span>
+            <span class="n">cv2</span><span class="o">.</span><span class="n">namedWindow</span><span class="p">(</span><span class="s2">&quot;Disparity WLS filtered&quot;</span><span class="p">,</span><span class="n">cv2</span><span class="o">.</span><span class="n">WINDOW_NORMAL</span><span class="p">)</span>
+            <span class="n">cv2</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="s2">&quot;Disparity WLS filtered&quot;</span><span class="p">,</span> <span class="n">disp_vis</span><span class="p">)</span>
+
+
+
+
+            <span class="c1">#annotated_frame = results[0].plot()</span>
+            <span class="n">masks</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">masks</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>  <span class="c1"># shape: (num_detections, H, W)</span>
+            <span class="n">orig_h</span><span class="p">,</span> <span class="n">orig_w</span> <span class="o">=</span> <span class="n">img_right</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">mask</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">masks</span><span class="p">):</span>
+                <span class="c1"># Resize do rozmiaru obrazu</span>
+                <span class="n">mask_resized</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span> <span class="p">(</span><span class="n">orig_w</span><span class="p">,</span> <span class="n">orig_h</span><span class="p">),</span> <span class="n">interpolation</span><span class="o">=</span><span class="n">cv2</span><span class="o">.</span><span class="n">INTER_NEAREST</span><span class="p">)</span>
+
+                <span class="c1"># Kolor losowy</span>
+                <span class="n">color</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+
+                <span class="c1"># Nałóż maskę</span>
+                <span class="n">colored</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">right_copy</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+                    <span class="n">colored</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">c</span><span class="p">]</span> <span class="o">=</span> <span class="n">color</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="o">*</span> <span class="n">mask_resized</span>
+
+                <span class="c1"># Przezroczyste nałożenie</span>
+                <span class="n">alpha</span> <span class="o">=</span> <span class="mf">0.6</span>
+                <span class="n">right_copy</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">addWeighted</span><span class="p">(</span><span class="n">right_copy</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">colored</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+                <span class="n">filtered_disp_clean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">filtered_disp</span><span class="p">,</span> <span class="n">nan</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">posinf</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">neginf</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+                <span class="n">disparity_masked</span> <span class="o">=</span> <span class="n">filtered_disp_clean</span> <span class="o">*</span> <span class="n">mask_resized</span>
+
+                <span class="c1"># Znajdź indeks punktu z największą disparity (czyli najmniejszą odległością)</span>
+                <span class="c1"># W masce disparity może być 0 tam gdzie brak danych, więc pomijamy</span>
+                <span class="c1"># Pobierz disparity tylko w masce i &gt;0</span>
+                <span class="n">valid_disparities</span> <span class="o">=</span> <span class="n">disparity_masked</span><span class="p">[(</span><span class="n">mask_resized</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">disparity_masked</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)]</span>
+
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">valid_disparities</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">continue</span>
+
+                <span class="n">mean_disp</span> <span class="o">=</span> <span class="n">valid_disparities</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+                <span class="n">depth_m</span> <span class="o">=</span> <span class="n">f_right</span> <span class="o">*</span> <span class="mf">0.03</span> <span class="o">/</span> <span class="n">mean_disp</span>
+
+
+                <span class="k">if</span> <span class="n">depth_m</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1">#print(f&quot;Obiekt {i}: Średnia disparity = {mean_disp:.2f}, odległość = {depth_m:.2f} m&quot;)</span>
+                    <span class="c1"># Oblicz różnice abs między disparity a mean_disp</span>
+                    <span class="n">diffs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">disparity_masked</span> <span class="o">-</span> <span class="n">mean_disp</span><span class="p">)</span>
+                    <span class="n">diffs</span><span class="p">[</span><span class="n">mask_resized</span> <span class="o">==</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>  <span class="c1"># poza maską ustawiamy na nieskończoność, aby je odrzucić</span>
+
+                    <span class="n">min_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unravel_index</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="n">diffs</span><span class="p">),</span> <span class="n">diffs</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                    <span class="n">v</span><span class="p">,</span> <span class="n">u</span> <span class="o">=</span> <span class="n">min_idx</span>
+
+                    <span class="c1">#cv2.circle(right_copy, (u, v), 10, (0, 255, 0), 2)</span>
+
+                <span class="n">p1_3d</span><span class="p">,</span> <span class="n">p2_3d</span> <span class="o">=</span> <span class="n">sy</span><span class="o">.</span><span class="n">points_from_mask_to_3D</span><span class="p">(</span><span class="n">mask_resized</span><span class="p">,</span> <span class="n">filtered_disp</span><span class="p">,</span> <span class="n">K_right</span><span class="p">,</span> <span class="mf">0.03</span><span class="p">,</span> <span class="n">T_center_to_camera</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">p1_3d</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">p2_3d</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1">#print(f&quot;Punkt 1: {p1_3d}&quot;)</span>
+                    <span class="c1">#print(f&quot;Punkt 2: {p2_3d}&quot;)</span>
+
+
+                    <span class="n">p1_3d</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">p1_3d</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>  <span class="c1"># -&gt; [X, Y, Z, 1]</span>
+
+                    <span class="n">p1_3d</span> <span class="o">=</span> <span class="n">p1_3d</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span>
+                    <span class="n">p1_3d</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+                    <span class="n">p2_3d</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">p2_3d</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>  <span class="c1"># -&gt; [X, Y, Z, 1]</span>
+
+                    <span class="n">p2_3d</span> <span class="o">=</span> <span class="n">p2_3d</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span>
+                    <span class="n">p2_3d</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">=</span><span class="mi">0</span>
+
+
+                    <span class="c1"># Rzut na obraz</span>
+                    <span class="n">p1_3d_px</span> <span class="o">=</span> <span class="n">sy</span><span class="o">.</span><span class="n">project_points_world_to_image</span><span class="p">([</span><span class="n">p1_3d</span><span class="p">],</span> <span class="n">T_center_to_camera</span><span class="p">,</span> <span class="n">K</span><span class="p">)</span>
+                    <span class="n">p2_3d_px</span> <span class="o">=</span> <span class="n">sy</span><span class="o">.</span><span class="n">project_points_world_to_image</span><span class="p">([</span><span class="n">p2_3d</span><span class="p">],</span> <span class="n">T_center_to_camera</span><span class="p">,</span> <span class="n">K</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">p1_3d</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">p2_3d</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="c1"># Rysuj na obrazie</span>
+                        <span class="n">u1</span><span class="p">,</span><span class="n">v1</span> <span class="o">=</span> <span class="n">p1_3d_px</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                        <span class="n">u2</span><span class="p">,</span><span class="n">v2</span> <span class="o">=</span> <span class="n">p2_3d_px</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                        <span class="n">color_tuple</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">color</span><span class="p">)</span>
+                        <span class="n">cv2</span><span class="o">.</span><span class="n">circle</span><span class="p">(</span><span class="n">right_copy</span><span class="p">,</span> <span class="p">(</span><span class="n">u1</span><span class="p">,</span> <span class="n">v1</span><span class="p">),</span> <span class="mi">6</span><span class="p">,</span> <span class="n">color_tuple</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                        <span class="n">cv2</span><span class="o">.</span><span class="n">putText</span><span class="p">(</span><span class="n">right_copy</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;PT1&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">u1</span> <span class="o">+</span> <span class="mi">5</span><span class="p">,</span> <span class="n">v1</span> <span class="o">-</span> <span class="mi">10</span><span class="p">),</span>
+                                    <span class="n">cv2</span><span class="o">.</span><span class="n">FONT_HERSHEY_SIMPLEX</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="n">color_tuple</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+                        <span class="n">cv2</span><span class="o">.</span><span class="n">circle</span><span class="p">(</span><span class="n">right_copy</span><span class="p">,</span> <span class="p">(</span><span class="n">u2</span><span class="p">,</span> <span class="n">v2</span><span class="p">),</span> <span class="mi">6</span><span class="p">,</span> <span class="n">color_tuple</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                        <span class="n">cv2</span><span class="o">.</span><span class="n">putText</span><span class="p">(</span><span class="n">right_copy</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;PT2&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">u2</span> <span class="o">+</span> <span class="mi">5</span><span class="p">,</span> <span class="n">v2</span> <span class="o">-</span> <span class="mi">10</span><span class="p">),</span>
+                                    <span class="n">cv2</span><span class="o">.</span><span class="n">FONT_HERSHEY_SIMPLEX</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="n">color_tuple</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+                        <span class="n">box_corners</span> <span class="o">=</span> <span class="n">sy</span><span class="o">.</span><span class="n">get_ground_box_corners</span><span class="p">(</span><span class="n">p1_3d</span><span class="p">,</span> <span class="n">p2_3d</span><span class="p">)</span>
+                        <span class="n">sy</span><span class="o">.</span><span class="n">draw_ground_box_on_image</span><span class="p">(</span><span class="n">right_copy</span><span class="p">,</span> <span class="n">box_corners</span><span class="p">,</span> <span class="n">T_center_to_camera</span><span class="p">,</span> <span class="n">K_right</span><span class="p">,</span> <span class="n">color_tuple</span><span class="p">)</span>
+
+                    <span class="c1">#print(&quot;-----------------------------&quot;)</span>
+                    <span class="c1">#print(&quot;_____________________________&quot;)</span>
+
+                <span class="n">ys</span><span class="p">,</span> <span class="n">xs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask_resized</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">xs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">return</span>
+                <span class="n">center_x</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">xs</span><span class="p">))</span>
+                <span class="n">center_y</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">ys</span><span class="p">))</span>
+
+                <span class="n">cv2</span><span class="o">.</span><span class="n">putText</span><span class="p">(</span><span class="n">right_copy</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">),</span> <span class="p">(</span><span class="n">center_x</span><span class="p">,</span> <span class="n">center_y</span><span class="p">),</span>
+                    <span class="n">cv2</span><span class="o">.</span><span class="n">FONT_HERSHEY_SIMPLEX</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="mi">255</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">),</span> <span class="mi">2</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">LINE_AA</span><span class="p">)</span>
+
+
+            <span class="c1"># Po pętli pokaż obraz</span>
+            <span class="k">if</span> <span class="n">depth_m</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">cv2</span><span class="o">.</span><span class="n">namedWindow</span><span class="p">(</span><span class="s2">&quot;Maski z punktami najblizszymi&quot;</span><span class="p">,</span><span class="n">cv2</span><span class="o">.</span><span class="n">WINDOW_NORMAL</span><span class="p">)</span>
+                <span class="n">cv2</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="s2">&quot;Maski z punktami najblizszymi&quot;</span><span class="p">,</span> <span class="n">right_copy</span><span class="p">)</span>
+
+
+
+
+        <span class="c1">#vis.collect_homo(names_images, homographies_scaled, car, streams)</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">cv2</span><span class="o">.</span><span class="n">waitKey</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    
+        <span class="c1">#cv2.destroyAllWindows()</span>
+
+
+        
+
+<span class="c1"># --------------------- Main Controller Loop ---------------------</span>
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    
+    <span class="n">names_dists</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">dists</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">sensor_names</span><span class="p">:</span>
+        <span class="n">sensor</span> <span class="o">=</span> <span class="n">driver</span><span class="o">.</span><span class="n">getDevice</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">sensor</span><span class="p">:</span>
+            <span class="n">sensor</span><span class="o">.</span><span class="n">enable</span><span class="p">(</span><span class="n">TIME_STEP</span><span class="p">)</span>
+            <span class="n">distance_sensors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sensor</span><span class="p">)</span>
+
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Found sensor: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sensor not found: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+    
+    <span class="c1"># Initialize cameras</span>
+    
+
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">camera_names</span><span class="p">:</span>
+        <span class="n">cam</span> <span class="o">=</span> <span class="n">driver</span><span class="o">.</span><span class="n">getDevice</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cam</span><span class="p">:</span>
+            <span class="n">cam</span><span class="o">.</span><span class="n">enable</span><span class="p">(</span><span class="n">TIME_STEP</span><span class="p">)</span>
+            <span class="n">cameras</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cam</span><span class="p">)</span>
+            <span class="n">width</span> <span class="o">=</span> <span class="n">cam</span><span class="o">.</span><span class="n">getWidth</span><span class="p">()</span>
+            <span class="n">height</span> <span class="o">=</span> <span class="n">cam</span><span class="o">.</span><span class="n">getHeight</span><span class="p">()</span>
+            <span class="n">fov_rad</span> <span class="o">=</span> <span class="n">cam</span><span class="o">.</span><span class="n">getFov</span><span class="p">()</span>
+            <span class="n">K</span> <span class="o">=</span> <span class="n">sy</span><span class="o">.</span><span class="n">calculate_intrinsic_matrix</span><span class="p">(</span><span class="n">width</span><span class="p">,</span> <span class="n">height</span><span class="p">,</span> <span class="n">fov_rad</span><span class="p">)</span>
+            <span class="n">cam_matrices</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">K</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Odnaleziono kamerę: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># initialize GPS</span>
+    <span class="n">gps</span> <span class="o">=</span> <span class="n">driver</span><span class="o">.</span><span class="n">getDevice</span><span class="p">(</span><span class="s2">&quot;gps&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">gps</span><span class="p">:</span>
+        <span class="n">gps</span><span class="o">.</span><span class="n">enable</span><span class="p">(</span><span class="n">TIME_STEP</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;GPS enabled&quot;</span><span class="p">)</span>
+
+    <span class="n">gyro</span> <span class="o">=</span> <span class="n">driver</span><span class="o">.</span><span class="n">getDevice</span><span class="p">(</span><span class="s2">&quot;gyro&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">gyro</span><span class="p">:</span>
+        <span class="n">gyro</span><span class="o">.</span><span class="n">enable</span><span class="p">(</span><span class="n">TIME_STEP</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Gyro enabled&quot;</span><span class="p">)</span>
+    <span class="n">imu</span> <span class="o">=</span> <span class="n">driver</span><span class="o">.</span><span class="n">getDevice</span><span class="p">(</span><span class="s2">&quot;inertial unit&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">imu</span><span class="p">:</span>
+        <span class="n">imu</span><span class="o">.</span><span class="n">enable</span><span class="p">(</span><span class="n">TIME_STEP</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;IMU enabled&quot;</span><span class="p">)</span>
+    
+
+    <span class="n">print_help</span><span class="p">()</span>
+
+    
+    
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;reading homographies...&quot;</span><span class="p">)</span>
+    <span class="n">right_H</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;right_homo.npy&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">left_H</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;left_homo.npy&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">front_H</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;front_homo.npy&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">right_fender_H</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;right_fender_homo.npy&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">left_fender_H</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;left_fender_homo.npy&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">rear_H</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;rear_homo.npy&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+    <span class="n">homographies</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">homographies</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="n">front_H</span><span class="p">,</span><span class="n">right_H</span><span class="p">,</span><span class="n">right_fender_H</span><span class="p">,</span>
+    <span class="n">rear_H</span><span class="p">,</span><span class="n">left_fender_H</span><span class="p">,</span><span class="n">left_H</span><span class="p">])</span>
+
+
+    <span class="n">s</span> <span class="o">=</span> <span class="mi">2</span> <span class="c1"># skala</span>
+    <span class="n">S</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">1</span><span class="o">/</span><span class="n">s</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="o">/</span><span class="n">s</span><span class="p">,</span><span class="mi">0</span><span class="p">],[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">homographies</span> <span class="o">=</span> <span class="p">[</span><span class="n">S</span> <span class="o">@</span> <span class="n">H</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">S</span><span class="p">)</span> <span class="k">for</span> <span class="n">H</span> <span class="ow">in</span> <span class="n">homographies</span><span class="p">]</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;reading transformation matrices...&quot;</span><span class="p">)</span>
+
+    <span class="n">front_T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;camera_front_bumper_wide_T_global.npy&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">left_T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;camera_left_pillar_T_global.npy&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">right_T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;camera_right_pillar_T_global.npy&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">left_fender_T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;camera_left_fender_T_global.npy&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">right_fender_T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;camera_right_fender_T_global.npy&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">rear_T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;camera_rear_T_global.npy&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">front_top_T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;camera_front_top_T_global.npy&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+    
+    <span class="n">prev_x</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">prev_y</span> <span class="o">=</span> <span class="mi">0</span>
+    
+    
+
+    <span class="n">stream1</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+    <span class="n">stream2</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+    <span class="n">stream3</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+    <span class="n">stream4</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+    <span class="n">stream5</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+    <span class="n">stream6</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+    <span class="n">stream7</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+    <span class="n">stream8</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+    <span class="n">stream9</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+    <span class="n">stream10</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+    <span class="n">stream11</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+    <span class="n">stream12</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+    <span class="n">stream13</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">Stream</span><span class="p">()</span>
+    <span class="n">streams</span> <span class="o">=</span> <span class="p">(</span><span class="n">stream1</span><span class="p">,</span><span class="n">stream2</span><span class="p">,</span><span class="n">stream3</span><span class="p">,</span><span class="n">stream4</span><span class="p">,</span><span class="n">stream5</span><span class="p">,</span>
+    <span class="n">stream6</span><span class="p">,</span><span class="n">stream7</span><span class="p">,</span><span class="n">stream8</span><span class="p">,</span><span class="n">stream9</span><span class="p">,</span><span class="n">stream10</span><span class="p">,</span><span class="n">stream11</span><span class="p">,</span><span class="n">stream12</span><span class="p">,</span><span class="n">stream13</span><span class="p">)</span>
+
+
+    <span class="n">car</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="s2">&quot;bmw.png&quot;</span><span class="p">,</span> <span class="n">flags</span><span class="o">=</span><span class="n">cv2</span><span class="o">.</span><span class="n">IMREAD_COLOR</span><span class="p">)</span>
+
+    <span class="n">model</span> <span class="o">=</span> <span class="n">YOLO</span><span class="p">(</span><span class="s2">&quot;yolo11m-seg.pt&quot;</span><span class="p">)</span>
+    <span class="c1">#</span>
+    <span class="c1">#</span>
+    <span class="c1">#</span>
+    
+    <span class="n">last_sensor_time</span> <span class="o">=</span> <span class="n">driver</span><span class="o">.</span><span class="n">getTime</span><span class="p">()</span>
+    <span class="n">last_image_time</span>  <span class="o">=</span> <span class="n">driver</span><span class="o">.</span><span class="n">getTime</span><span class="p">()</span>
+    <span class="n">last_key_time</span> <span class="o">=</span> <span class="n">driver</span><span class="o">.</span><span class="n">getTime</span><span class="p">()</span>
+    
+    
+    <span class="n">T_center_to_camera</span> <span class="o">=</span> <span class="n">front_top_T</span>
+    <span class="n">name_right</span> <span class="o">=</span> <span class="s2">&quot;camera_front_top&quot;</span>
+    <span class="n">name_left</span> <span class="o">=</span> <span class="s2">&quot;camera_front_top_add&quot;</span>
+
+    <span class="c1"># Obiekt stereo matcher</span>
+    <span class="n">stereo_left</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">StereoSGBM_create</span><span class="p">(</span><span class="n">minDisparity</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">numDisparities</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+    <span class="n">blockSize</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+    <span class="n">disp12MaxDiff</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">uniquenessRatio</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">speckleWindowSize</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">speckleRange</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+    <span class="c1"># matcher dla prawego obrazu - trzeba użyć createRightMatcher z ximgproc</span>
+    <span class="n">stereo_right</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">ximgproc</span><span class="o">.</span><span class="n">createRightMatcher</span><span class="p">(</span><span class="n">stereo_left</span><span class="p">)</span>
+    
+    
+    <span class="c1">#----------------------------------------- Dalej wątki ---------------------------------------------------</span>
+    
+    <span class="n">plt</span><span class="o">.</span><span class="n">ion</span><span class="p">()</span>
+    <span class="n">fig</span><span class="p">,</span> <span class="n">ax_cones</span><span class="p">,</span> <span class="n">ax_live</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+    <span class="n">parking</span> <span class="o">=</span> <span class="kc">False</span>
+    
+    <span class="k">def</span> <span class="nf">check_keyboard</span><span class="p">():</span>
+        <span class="k">nonlocal</span> <span class="n">parking</span><span class="p">,</span> <span class="n">fig</span><span class="p">,</span> <span class="n">ax_cones</span><span class="p">,</span> <span class="n">ax_live</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="n">keyboard</span><span class="o">.</span><span class="n">getKey</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="n">Keyboard</span><span class="o">.</span><span class="n">UP</span><span class="p">:</span>
+            <span class="n">set_speed</span><span class="p">(</span><span class="n">speed</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="n">Keyboard</span><span class="o">.</span><span class="n">DOWN</span><span class="p">:</span>
+            <span class="n">set_speed</span><span class="p">(</span><span class="n">speed</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="n">Keyboard</span><span class="o">.</span><span class="n">RIGHT</span><span class="p">:</span>
+            <span class="n">change_manual_steering_angle</span><span class="p">(</span><span class="o">+</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="n">Keyboard</span><span class="o">.</span><span class="n">LEFT</span><span class="p">:</span>
+            <span class="n">change_manual_steering_angle</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="nb">ord</span><span class="p">(</span><span class="s1">&#39;P&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">key</span> <span class="o">==</span> <span class="nb">ord</span><span class="p">(</span><span class="s1">&#39;p&#39;</span><span class="p">):</span>
+            <span class="n">parking</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">parking</span>
+            <span class="k">if</span> <span class="n">parking</span><span class="p">:</span>
+                <span class="c1"># Utwórz okno i osie tylko raz</span>
+                
+                <span class="n">fig</span><span class="p">,</span> <span class="n">ax_cones</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span><span class="mi">12</span><span class="p">))</span>
+                <span class="n">fig</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s2">&quot;Parkowanie&quot;</span><span class="p">)</span>
+                <span class="c1">#fig.show()</span>
+                
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Rozpoczęto parking&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+               
+                <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+                <span class="n">cv2</span><span class="o">.</span><span class="n">destroyAllWindows</span><span class="p">()</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Ukończono parking&quot;</span><span class="p">)</span>
+
+    
+    <span class="n">ranges</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">first_call</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">while</span> <span class="n">driver</span><span class="o">.</span><span class="n">step</span><span class="p">()</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+
+        <span class="n">now</span> <span class="o">=</span> <span class="n">driver</span><span class="o">.</span><span class="n">getTime</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">parking</span><span class="p">:</span>
+            <span class="c1"># 2) Co SENSOR_INTERVAL – czujniki + automaty + rysunki</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            if now - last_sensor_time &gt;= SENSOR_INTERVAL:</span>
+<span class="sd">                last_sensor_time = now</span>
+<span class="sd">                if first_call:</span>
+<span class="sd">                    #plotter = palg.LivePlotter(ax_live)</span>
+<span class="sd">                    parker = palg.Parking(driver, &quot;left&quot;, now)</span>
+<span class="sd">                    yaw_init = imu.getRollPitchYaw()[2]</span>
+<span class="sd">                first_call = False</span>
+<span class="sd">                # 2a) odczyt odległości</span>
+<span class="sd">                dists = [process_distance_sensors(s) for s in distance_sensors]</span>
+<span class="sd">                names = dict(zip(sensor_names, dists))</span>
+<span class="sd">    </span>
+<span class="sd">                # 2b) draw_cones na ax_cones</span>
+<span class="sd">                vis.draw_cones(ax_cones, fig, dists)</span>
+<span class="sd">    </span>
+<span class="sd">                # 2c) live-plot na ax_live</span>
+<span class="sd">                #plotter.val = names[&quot;distance sensor left front side&quot;]</span>
+<span class="sd">                #plotter.update(0)</span>
+<span class="sd">                </span>
+<span class="sd">                # 2d) automaty parkowania</span>
+<span class="sd">                yaw = imu.getRollPitchYaw()[2] - yaw_init</span>
+<span class="sd">                parker.update_state(names, yaw)</span>
+<span class="sd">                if parker.state == &quot;waiting_for_park&quot;:</span>
+<span class="sd">                    odom, spot = parker.update_state(names, yaw)</span>
+<span class="sd">                    parker.exec_path(odom, spot, names[&quot;distance sensor front left side&quot;])</span>
+<span class="sd">                #fig.canvas.draw_idle()</span>
+<span class="sd">                #fig.canvas.flush_events()</span>
+<span class="sd">            &quot;&quot;&quot;</span>    
+            <span class="c1"># 3) Co IMAGE_INTERVAL – przetwarzanie obrazów</span>
+            <span class="k">if</span> <span class="n">now</span> <span class="o">-</span> <span class="n">last_image_time</span> <span class="o">&gt;=</span> <span class="n">IMAGE_INTERVAL</span><span class="p">:</span>
+                <span class="n">last_image_time</span> <span class="o">=</span> <span class="n">now</span>
+                <span class="n">images</span> <span class="o">=</span> <span class="p">[</span><span class="n">get_camera_image</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">cameras</span><span class="p">]</span>
+                <span class="n">names_images</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">camera_names</span><span class="p">,</span> <span class="n">images</span><span class="p">))</span>
+                <span class="n">viss</span> <span class="o">=</span> <span class="n">vis</span><span class="o">.</span><span class="n">alt_collect_homo</span><span class="p">(</span><span class="n">names_images</span><span class="p">,</span> <span class="n">homographies</span><span class="p">,</span> <span class="n">car</span><span class="p">,</span> <span class="n">streams</span><span class="p">)</span>
+                <span class="n">cv2</span><span class="o">.</span><span class="n">imwrite</span><span class="p">(</span><span class="s2">&quot;img3_vis.png&quot;</span><span class="p">,</span><span class="n">viss</span><span class="p">)</span>
+            <span class="n">cv2</span><span class="o">.</span><span class="n">waitKey</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>  
+               
+        <span class="k">if</span> <span class="n">now</span> <span class="o">-</span> <span class="n">last_key_time</span> <span class="o">&gt;=</span> <span class="n">KEYBOARD_INTERVAL</span><span class="p">:</span>
+            <span class="n">last_key_time</span> <span class="o">=</span> <span class="n">now</span>
+            <span class="n">check_keyboard</span><span class="p">()</span>
+    
+    
+
+
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+    
+<span class="c1">#cv2.imwrite(&quot;lewa_kolumna_6.png&quot;,names_images[&quot;camera_left_pillar&quot;])</span>
+<span class="c1">#cv2.imwrite(&quot;lewy_blotnik_6.png&quot;,names_images[&quot;camera_left_fender&quot;])</span>
+
+<span class="c1">#SKOPIOWAĆ DO PĘTLI, JEŻELI CHCE SIĘ UŻYĆ STAREJ WERSJI Z BRYŁAMI YOLO</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">T_center_to_camera = front_top_T</span>
+<span class="sd">name = &quot;camera_front_top&quot;</span>
+<span class="sd">results = model(names_images[name],half=True,device = 0,classes = [2,10,11,12,14,72],conf=0.6)</span>
+
+<span class="sd">annotated_frame = results[0].plot()</span>
+
+<span class="sd">K = cam_matrices[name]</span>
+<span class="sd">#Ekstrakcja bounding boxów w formacie [x1, y1, x2, y2]</span>
+<span class="sd">det_dim = results[0].boxes.xyxy.cpu().numpy()</span>
+
+<span class="sd">for det in det_dim:</span>
+<span class="sd">   x1, y1, x2, y2 = det[:4]</span>
+<span class="sd">   w = x2 - x1</span>
+<span class="sd">   h = y2 - y1</span>
+<span class="sd">   x = x1</span>
+<span class="sd">   y = y1</span>
+
+<span class="sd">   bbox = (int(x), int(y), int(w), int(h))</span>
+
+<span class="sd">   anchor_world, side = sy.classify_object_position_and_anchor(bbox, K, T_center_to_camera,name)</span>
+<span class="sd">   if anchor_world is None:</span>
+<span class="sd">       continue</span>
+
+<span class="sd">   box_world = sy.create_3d_box(anchor_world, side)</span>
+
+
+
+<span class="sd">   image_points = sy.project_points_world_to_image(box_world, T_center_to_camera, K)</span>
+
+<span class="sd">   # Rysowanie 3D boxa</span>
+<span class="sd">   # Rysowanie dołu</span>
+<span class="sd">   for i in range(4):</span>
+<span class="sd">       sy.safe_line(annotated_frame, image_points, i, (i + 1) % 4, (0, 255, 0), 2)</span>
+
+<span class="sd">   # Rysowanie góry</span>
+<span class="sd">   for i in range(4, 8):</span>
+<span class="sd">       sy.safe_line(annotated_frame, image_points, i, 4 + (i + 1) % 4, (0, 0, 255), 2)</span>
+
+<span class="sd">   # Piony</span>
+<span class="sd">   for i in range(4):</span>
+<span class="sd">       sy.safe_line(annotated_frame, image_points, i, i + 4, (255, 0, 0), 2)</span>
+
+<span class="sd">cv2.namedWindow(&quot;yolo&quot;, cv2.WINDOW_NORMAL)</span>
+<span class="sd">cv2.imshow(&quot;yolo&quot;, annotated_frame)</span>
+<span class="sd">cv2.waitKey(1)</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+</pre></div>

@@ -24,7 +24,7 @@ def draw_cones(ax,fig,distances):
     """
     Do wizualizacji strefy detekcji czujników ultradzwiękowych.
     Jest wywoływana za każdym razem w pętli kontrolera - rysuje na pustej kanwie
-    matplotlib'a i 
+    matplotlib'a i
     """
     ax.clear()
 
@@ -79,12 +79,17 @@ def draw_cones(ax,fig,distances):
     ax.set_aspect('equal')
     ax.set_title("Czujniki ultradźwiękowe")
     ax.grid(True)
-    fig.canvas.draw()
-    fig.canvas.flush_events()
+    #fig.canvas.draw()
+    #fig.canvas.flush_events()
 
 
 
 def draw_distance(distances):
+    """
+    Pomocnicza funkcja, też do wizualizacji, ale robi obszar jako b-spline
+    uśrednianie końców wektorów odległości z czujników. Nie jest używana
+    w finalnej wersji.
+    """
     #patrzymy z przodu, oś symetrii patrzy do przodu
     front_sensor_angles = [90,45,15,-15,-45,-90]
     #tutaj liczymy dodatnio przeciw wskazówek, ujemnie - ze wskazówkami
@@ -114,32 +119,29 @@ def draw_distance(distances):
     )
 
     polygon_points = np.concatenate([endpoints[:6], endpoints[6:][::-1]])
-
-
+    #obróć żeby samochód był do przodu
     rot = np.array([[0, -1], [1, 0]])
     rotated_points = polygon_points @ rot.T
     rotated_sensor_positions = sensor_positions @ rot.T
-
-
-    # zamiast dokładać closure point, pracujemy tylko na unikalnych
-    pts = rotated_points  # shape (N,2), bez dodatkowego powtórzenia
+    #alias
+    pts = rotated_points
 
     # przygotowujemy listę x,y
     x, y = pts[:,0], pts[:,1]
 
-    # SPRÓBUJ splprep, a jak się nie uda, to fallback na moving average
+    #  splprep, a jak się nie uda, to fallback na moving average
     try:
         tck, u = splprep([x, y], s=0, per=True, k=3)
         unew = np.linspace(0, 1.0, 200)
         out = splev(unew, tck)
         xs, ys = out[0], out[1]
     except ValueError:
-        # Fallback: prosta średnia ruchoma z oknem 5 punktów (cykliczne)
+        # fallback: prosta średnia ruchoma z oknem 5 punktów (cykliczne)
         xs = uniform_filter1d(x, size=5, mode='wrap')
         ys = uniform_filter1d(y, size=5, mode='wrap')
 
 
-    # Rysowanie
+    # rysowanie
     plt.clf()
     plt.fill(xs, ys, color='lightblue', alpha=0.5)
     plt.plot(rotated_sensor_positions[:, 0],
@@ -161,21 +163,17 @@ def draw_distance(distances):
 
 def collect_homo(names_images,homographies,car,streams):
     """
-    DRUGI SPOSÓB
+    DRUGI SPOSÓB tworzenia widoku "z lotu ptaka". Sklejanie połówek
     """
-
-
-
-
-
     h, w = int(3600/s),int(3600/s)
-
+    #pobieramy streamy do przetwarzania obrazów na GPU
     (stream1,stream2,stream3,stream4,
     stream5,stream6,stream7,stream8,
     stream9,stream10,stream11,stream12,stream13) = streams
     (front_H,right_H,right_fender_H,
     rear_H,left_fender_H,left_H)= homographies
     imgs = []
+
     # warp CUDA wszystkie kamery
     left = warp_with_cuda(names_images["camera_left_pillar"], left_H, "left homo", h, w,stream1)
     right = warp_with_cuda(names_images["camera_right_pillar"], right_H, "right homo", h, w,stream2)
@@ -184,8 +182,8 @@ def collect_homo(names_images,homographies,car,streams):
     # front_wind = warp_with_cuda(names_images["camera_front_top"], front_wind_H, "front wind homo", h, w)
     right_fender = warp_with_cuda(names_images["camera_right_fender"], right_fender_H, "right fender homo", h, w,stream5)
     left_fender = warp_with_cuda(names_images["camera_left_fender"], left_fender_H, "left fender homo", h, w,stream6)
-    #imgs.extend([left,right,rear,front,
 
+    #dalej się skaluje homografie, jeżeli była zmieniona rozdzielczość, bo do 4K było
     S = np.array([[1/s,0,0],[0,1/s,0],[0,0,1]]).astype(np.float32)
 
     right_to_front_H = np.array([[ 1.0103254e+00,  8.9369901e-03,  2.4237607e+03],
@@ -197,8 +195,6 @@ def collect_homo(names_images,homographies,car,streams):
  [-5.9892777e-03,  1.0021796e+00,  1.8966011e+03],
  [-2.1722203e-06, -4.8802093e-07,  1.0000000e+00]]).astype(np.float32)
     left_to_front_H = S @ left_to_front_H @ np.linalg.inv(S)
-
-
 
     left_to_rear_H = np.array([[ 9.7381920e-01, -2.3735706e-03, -2.2782476e+03],
  [ 4.3283560e-04,  9.7134042e-01, -1.7275361e+03],
@@ -218,6 +214,7 @@ def collect_homo(names_images,homographies,car,streams):
  [ 1.0615680e-05,  6.2511299e-07,  1.0000000e+00]]).astype(np.float32)
     rear_to_front_H = S @ rear_to_front_H @ np.linalg.inv(S)
 
+    #blendujemy na GPU, wejściem jest GpuMat, nazwy macierzy wskazują kierunek
     canvas_front = blend_warp_GPUONLY(front,right,right_to_front_H,stream7)
     canvas_front = blend_warp_GPUONLY(canvas_front,left,left_to_front_H,stream8)
     canvas_rear = blend_warp_GPUONLY(rear,left_fender,left_to_rear_H,stream9)
@@ -226,64 +223,47 @@ def collect_homo(names_images,homographies,car,streams):
 
     canvas = canvas.download()
 
-    cv.namedWindow("bev",cv.WINDOW_NORMAL)
-    cv.imshow("bev",canvas)
-    #cv.imwrite("img_vis.jpg",cv.cvtColor(canvas,cv.COLOR_BGR2RGB))
-    """
-    crop_scale = 0.5
-    margin = 0
-    ch,cw = canvas.shape[0], canvas.shape[1]
-    crop_h = int(ch * crop_scale / 2)
-    crop_w = int(cw * crop_scale / 2)
+    #cv.namedWindow("bev",cv.WINDOW_NORMAL)
+    #cv.imshow("bev",canvas)
 
-    center_h, center_w = ch // 2, cw // 2
-
-    y1 = max(center_h - crop_h - margin, 0)
-    y2 = min(center_h + crop_h + margin, h)
-    x1 = max(center_w - crop_w - margin, 0)
-    x2 = min(center_w + crop_w + margin, w)
-
-    cropped = canvas[y1:y2, x1:x2]
-
-
-    """
-    #DZIALA TYLKO DLA FULLHD OBRAZOW, S=2
     cropped = canvas
     h, w = cropped.shape[:2]
-
+    canvas.clear()
     crop_top_px    = int(0.184 * h)
     crop_bottom_px = int(0.215 * h)
     crop_left_px = int(0.14 * w)
     crop_right_px = int(0.14 * w)
-
+    #obcinamy o te wartości powyżej z góry, dołu i z boków
     y1 = crop_top_px
     y2 = h - crop_bottom_px
     x1 = crop_left_px
     x2 = w - crop_right_px
     cropped = cropped[y1:y2, x1:x2]
 
-    scalex = 0.18 # np. 20% szerokości BEV
+    #prób i błędów wstawiamy obrazek samochodu
+    scalex = 0.18
     scaley = 0.45
     bev_h, bev_w = cropped.shape[:2]
     new_w = int(bev_w * scalex)
     new_h = int(bev_h * scaley)
     car_resized = cv.resize(car, (new_w, new_h), interpolation=cv.INTER_AREA)
 
-    # 3. Oblicz pozycję tak, by wstawić go na środku
+    #przesuń
     x_offset = (bev_w - new_w) // 2 + 15
     y_offset = (bev_h - new_h) // 2 - 15
-
+    #wstaw w tym obszarze
     cropped[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = car_resized
-
 
     cv.namedWindow("bev",cv.WINDOW_NORMAL)
     cv.imshow("bev",cropped)
-    cv.imwrite("img_vis.png",cropped)
-    #H,_ = cc.chess_homography(canvas,names_images["camera_helper"],(10,6))
+    #cv.imwrite("img_vis.png",cropped)
 
     return canvas
 
 def test_homo(names_images,homographies,streams):
+    """
+    Była pomocnicza, żeby wykonać sprawozdanie, dla homografii
+    """
     h, w = int(3600/s),int(3600/s)
 
     (stream1,stream2,stream3,stream4,
@@ -297,7 +277,7 @@ def test_homo(names_images,homographies,streams):
     right = warp_with_cuda(names_images["camera_right_pillar"], right_H, "right homo", h, w,stream2)
     rear = warp_with_cuda(names_images["camera_rear"], rear_H, "rear homo", h, w,stream3)
     front = warp_with_cuda(names_images["camera_front_bumper_wide"], front_H, "front homo", h, w,stream4)
-    # front_wind = warp_with_cuda(names_images["camera_front_top"], front_wind_H, "front wind homo", h, w)
+
     right_fender = warp_with_cuda(names_images["camera_right_fender"], right_fender_H, "right fender homo", h, w,stream5)
     left_fender = warp_with_cuda(names_images["camera_left_fender"], left_fender_H, "left fender homo", h, w,stream6)
 
@@ -309,7 +289,7 @@ def test_homo(names_images,homographies,streams):
 
 def alt_collect_homo(names_images,homographies,car,streams):
     """
-    TRZECI SPOSOB
+    TRZECI SPOSOB na widok "z lotu ptaka". Nakładanie na współną kanwę
     """
     h, w = int(3600/s),int(3600/s)
 
@@ -324,7 +304,7 @@ def alt_collect_homo(names_images,homographies,car,streams):
     right = warp_with_cuda(names_images["camera_right_pillar"], right_H, "right homo", h, w,stream2)
     rear = warp_with_cuda(names_images["camera_rear"], rear_H, "rear homo", h, w,stream3)
     front = warp_with_cuda(names_images["camera_front_bumper_wide"], front_H, "front homo", h, w,stream4)
-    # front_wind = warp_with_cuda(names_images["camera_front_top"], front_wind_H, "front wind homo", h, w)
+
     right_fender = warp_with_cuda(names_images["camera_right_fender"], right_fender_H, "right fender homo", h, w,stream5)
     left_fender = warp_with_cuda(names_images["camera_left_fender"], left_fender_H, "left fender homo", h, w,stream6)
 
@@ -340,6 +320,8 @@ def alt_collect_homo(names_images,homographies,car,streams):
 
     H_px_to_m_bev,_ = cv.findHomography(met,px,cv.RANSAC,5.0)
 
+    #znowu skalujemy - dodatkowo jeszcze korygowanie macierzy
+
     S = np.array([[1/s,0,0],[0,1/s,0],[0,0,1]]).astype(np.float32)
     H_left_to_bev= np.array([[5.78196165e-01, 1.36768422e-03 ,5.75901552e+02],
  [2.08805960e-03, 5.78244815e-01, 1.31412439e+03],
@@ -350,6 +332,9 @@ def alt_collect_homo(names_images,homographies,car,streams):
  [ 3.93911249e-06,  5.73836613e-01,  1.31777314e+03],
  [ 1.31049336e-07, -1.42342160e-07,  1.00000000e+00]],dtype=np.float32)
     H_right_to_bev = S @ H_right_to_bev @ np.linalg.inv(S)
+
+    #korygowanie macierzy, bo można tak każdy obraz sobie poprawić, jeżeli
+    #złe jest dopasowanie
 
     H_left_fender_to_bev = np.array([[ 5.60635651e-01,  3.13768463e-02,  6.29376393e+02],
  [-1.14353803e-02,  6.03217079e-01, 2.80548010e+03],
@@ -385,6 +370,9 @@ def alt_collect_homo(names_images,homographies,car,streams):
  [1.77376103e-07 ,1.22892995e-06, 1.00000000e+00]],dtype = np.float32)
     H_front_to_bev = S @ H_front_to_bev @ np.linalg.inv(S)
 
+    #tutaj już zamiast dynamicznie dobierać rozmiar kanwy dajemy stały
+    #po kolei na kanwę, gdzie już obrazy są, nakładamy kolejny
+    # można w dowolnej kolejnosci!
     bev_left = blend_warp_GPUONLY(canvas,left,H_left_to_bev,stream7,canvas_size=(6000//s,6000//s))
     bev_right = blend_warp_GPUONLY(bev_left,right,H_right_to_bev,stream8,canvas_size=(6000//s,6000//s))
     bev_left_fender = blend_warp_GPUONLY(bev_right,left_fender,H_left_fender_to_bev,stream9,canvas_size=(6000//s,6000//s))
@@ -392,11 +380,9 @@ def alt_collect_homo(names_images,homographies,car,streams):
     bev_rear = blend_warp_GPUONLY(bev_right_fender,rear,H_rear_to_bev,stream11,canvas_size=(6000//s,6000//s))
     bev_front = blend_warp_GPUONLY(bev_rear,front,H_front_to_bev,stream12,canvas_size=(6000//s,6000//s))
 
-
     bev = bev_front.download()
 
-
-    # Granice w metrach (obszar 8x6 metrów -> prostokąt)
+    # Granice w metrach, tutaj pierwsze - X samochodu, drugie - Y samochod, czyli wlewo-wprawo
     meters = np.array([
         [ 5.6,  6],
         [ 5.6, -6],
@@ -410,9 +396,6 @@ def alt_collect_homo(names_images,homographies,car,streams):
     # Przekształć na piksele
     pxs = (H_px_to_m_bev @ meters_hom.T).T
 
-    # Normalizuj (dziel przez ostatni element, jeśli nie równe 1)
-    #pxs /= pxs[:, [2]]
-
     # Rzutuj na int (piksele)
     pxs_int = pxs[:, :2].astype(int)
 
@@ -422,7 +405,7 @@ def alt_collect_homo(names_images,homographies,car,streams):
     y_min = np.min(pxs_int[:, 1])
     y_max = np.max(pxs_int[:, 1])
 
-    # UWAGA: Sprawdzenie czy zakres jest w granicach obrazu
+    # sprawdzenie czy zakres jest w granicach obrazu - aby nie było błędów
     x_min = max(x_min, 0)
     y_min = max(y_min, 0)
     x_max = min(x_max, canvas_cpu.shape[1])
@@ -430,9 +413,60 @@ def alt_collect_homo(names_images,homographies,car,streams):
 
     # Obcinanie obrazu (ROI -> Region of Interest)
     cropped = bev[y_min:y_max, x_min:x_max]
-    # Pokaż wynik
-    #cv.namedWindow("ROI Visualization", cv.WINDOW_NORMAL)
-    #cv.imshow("ROI Visualization", bev_front)
+
+
+    # dwa punkty homogeniczne w metrach dla osi X
+    e_x = np.array([[0,0,1],
+                [1,0,1]], dtype=np.float32)
+    # dwa punkty homogeniczne w metrach dla osi Y
+    e_y = np.array([[0,0,1],
+                [0,1,1]], dtype=np.float32)
+
+    # rzut tych punktów na piksele:
+    p_x = (H_px_to_m_bev @ e_x.T).T
+    p_x /= p_x[:, [2]]
+    p_y = (H_px_to_m_bev @ e_y.T).T
+    p_y /= p_y[:, [2]]
+
+    # skaluj punkty
+    scale_x = np.linalg.norm(p_x[1,:2] - p_x[0,:2])  # px na 1 m w osi X
+    scale_y = np.linalg.norm(p_y[1,:2] - p_y[0,:2])  # px na 1 m w osi Y
+    # 1) Policz w pikselach samochód
+    # rozmiar samochodu w pikselach na kanwie
+    W_real = 1.95  # szerokość samochodu w metrach
+    L_real = 4.95  # długość samochodu w metrach
+    w_car_px = int(round(W_real * scale_x))
+    h_car_px = int(round(L_real * scale_y))
+
+    # 2) Skaluj
+    car_resized = cv.resize(car, (w_car_px, h_car_px), interpolation=cv.INTER_AREA)
+
+    # 3) Wylicz środek ROI jako środek samego cropped
+    Hc, Wc = cropped.shape[:2]
+    cx_px = Wc // 2
+    cy_px = Hc // 2
+
+    # 4) Przesunąć jeżeli trzeba
+    d_forward = 0.1 # np. 0.5 m do przodu
+    pix_offset = int(round(d_forward * scale_y))
+    # w obrazie „do przodu” = w górę, czyli y maleje:
+    cy_px -= pix_offset
+
+    # 5) Oblicz ROI w pikselach:
+    x0 = cx_px - w_car_px//2
+    y0 = cy_px - h_car_px//2
+    x1 = x0 + w_car_px
+    y1 = y0 + h_car_px
+
+    # 6) Przytnij do granic i wklej:
+    x0c, y0c = max(x0,0), max(y0,0)
+    x1c, y1c = min(x1,Wc), min(y1,Hc)
+    sx0, sy0 = x0c - x0, y0c - y0
+    sx1, sy1 = sx0 + (x1c-x0c), sy0 + (y1c-y0c)
+
+    cropped[y0c:y1c, x0c:x1c] = car_resized[sy0:sy1, sx0:sx1]
+
+    #dalej dla tych kto się chce pobawić wstawianiem prostokątów na kanwę
 
     """
     # ======= PRZYKŁADOWE PUNKTY PROSTOKĄTA W METRACH =======
@@ -477,7 +511,10 @@ def alt_collect_homo(names_images,homographies,car,streams):
 
 
 def chain_collect_homo(names_images,homographies,car,streams):
-
+    """
+    PIERWSZY SPOSÓB na widok "z lotu ptaka". Każdy obraz łańcuchowo łączy się z
+    poprzednim w taki sposób, żeby wizualnie nie było zbytnio zniekształćeń
+    """
     h, w = int(3600/s),int(3600/s)
 
     (stream1,stream2,stream3,stream4,
@@ -538,9 +575,8 @@ def chain_collect_homo(names_images,homographies,car,streams):
     canvas = blend_warp_GPUONLY(canvas,left_fender,H5,stream11)
 
     canvas = canvas.download()
-    #cv.namedWindow("bev",cv.WINDOW_NORMAL)
-    #cv.imshow("bev",canvas)
 
+    #Przytnij obraz tak samo jak i w 2. sposobie collect_homo
     cropped = canvas
     h, w = cropped.shape[:2]
 
@@ -555,25 +591,21 @@ def chain_collect_homo(names_images,homographies,car,streams):
     x2 = w - crop_right_px
     cropped = cropped[y1:y2, x1:x2]
 
-    scalex = 0.18 # np. 20% szerokości BEV
+    scalex = 0.18
     scaley = 0.45
     bev_h, bev_w = cropped.shape[:2]
     new_w = int(bev_w * scalex)
     new_h = int(bev_h * scaley)
     car_resized = cv.resize(car, (new_w, new_h), interpolation=cv.INTER_AREA)
 
-    # 3. Oblicz pozycję tak, by wstawić go na środku
+    # przesuń żeby był na środku około
     x_offset = (bev_w - new_w) // 2 + 5
     y_offset = (bev_h - new_h) // 2 - 19
 
     cropped[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = car_resized
 
-
     cv.namedWindow("bev",cv.WINDOW_NORMAL)
     cv.imshow("bev",cropped)
-
-
-
     return cropped
 
 
@@ -592,7 +624,7 @@ def warp_with_cuda(image, H, name,h,w,stream, gpu=True, show=False,first_time=Tr
     else:
         gpu_img = image
     H_corrected = np.array(np.zeros((3,3))).astype(np.float32)
-
+    # przesuń obrazek, dla tej kamery ekskluzywnie
     if name == "left fender homo":
         #pierwsza w kolumnie translacji - x, druga liczba - y;
         translation = np.array([
@@ -623,26 +655,26 @@ def warp_with_cuda(image, H, name,h,w,stream, gpu=True, show=False,first_time=Tr
     return warped
 
 def warp_and_blend_gpu(img1, img2, H, canvas_size=None, alpha=0.8):
-    #canvas_size=(6000//s,6000//s)
+
     """
-    Fast GPU‐only homography warp + simple blend:
-      1) compute output canvas bounds & translation
-      2) warp img1, img2 onto that canvas
-      3) build binary masks on GPU via threshold
-      4) do a weighted blend in the overlap, and bitwise OR outside
+    Szybkie blendowanie obrazó ze wzajemną homografią:
+      1) policz rozmiar kanwy i przesunięcie
+      2) wyprostuj na kanwę oba obrazy
+      3) policz binarne maski na GPU
+      4) wyważony alpha-blending na wspólnym obszarze
 
     img1, img2 : BGR uint8
-    H          : float32 homography (3×3) mapping img2 → img1 frame
-    canvas_size: (w,h) to force output size, or None to auto‐compute
-    alpha      : blend weight for img2 in the overlap region
+    H          : homografia float32 z img2 na img1
+    canvas_size: (w,h) aby mieć stały rozmiar (nie zaleca się, nie po to to robione)
+    alpha      : waga mieszania
     """
-    # upload
+    # załaduj
     g1 = cv.cuda_GpuMat(); g1.upload(img1)
     g2 = cv.cuda_GpuMat(); g2.upload(img2)
     h1, w1 = img1.shape[:2]
     h2, w2 = img2.shape[:2]
 
-    # compute translation & canvas size if needed
+    # policz rozmiar kanwy i translację, wymagane zeby dynamicznie się doklejały obrazy
     if canvas_size is None:
         pts1 = np.float32([[0,0],[w1,0],[w1,h1],[0,h1]]).reshape(-1,1,2)
         pts2 = np.float32([[0,0],[w2,0],[w2,h2],[0,h2]]).reshape(-1,1,2)
@@ -656,97 +688,91 @@ def warp_and_blend_gpu(img1, img2, H, canvas_size=None, alpha=0.8):
         trans = np.eye(3, dtype=np.float32)
         out_w, out_h = canvas_size
 
-    # warp both onto GPU canvas
+    # warpuj oba na kanwę
     g1w = cv.cuda.warpPerspective(g1, trans,     (out_w, out_h))
     g2w = cv.cuda.warpPerspective(g2, trans @ H, (out_w, out_h))
 
-    # build masks by thresholding grayscale on GPU
+    # progowanie na gpu
     gray1 = cv.cuda.cvtColor(g1w, cv.COLOR_BGR2GRAY)
     gray2 = cv.cuda.cvtColor(g2w, cv.COLOR_BGR2GRAY)
     _, m1w = cv.cuda.threshold(gray1, 1, 255, cv.THRESH_BINARY)
     _, m2w = cv.cuda.threshold(gray2, 1, 255, cv.THRESH_BINARY)
 
-    # overlap region mask
+    # gdzie się pokrywają
     overlap = cv.cuda.bitwise_and(m1w, m2w)
 
-    # simple blend in overlap
+    # blendowanie w obszarze, gdzie się pokrywają obrazy, zwykłe alfa
     blend = cv.cuda.addWeighted(g1w, 1-alpha, g2w, alpha, 0)
 
-    # non‐overlap contributions
+    # tam gdzie się nie pokrywają, zrób normalnie
     inv2 = cv.cuda.bitwise_not(m2w)
     inv1 = cv.cuda.bitwise_not(m1w)
     part1 = cv.cuda.bitwise_and(g1w, cv.cuda.cvtColor(inv2, cv.COLOR_GRAY2BGR))
     part2 = cv.cuda.bitwise_and(g2w, cv.cuda.cvtColor(inv1, cv.COLOR_GRAY2BGR))
     partB = cv.cuda.bitwise_and(blend, cv.cuda.cvtColor(overlap, cv.COLOR_GRAY2BGR))
 
-    # sum them up
+    # dodaj do siebie te dwie części
     tmp = cv.cuda.add(part1, part2)
     out = cv.cuda.add(tmp, partB)
-
+    # zwróc normalny obraz numpy
     return out.download()
 
 def blend_warp_GPUONLY(g1, g2, H,stream, canvas_size=None, alpha=0.85):
     """
     Szybkie mieszanie i prostowanie dwóch obrazów na GPU.
-    Wykorzystuje
-    Fast GPU‐only homography warp + simple blend:
-      1) compute output canvas bounds & translation
-      2) warp img1, img2 onto that canvas
-      3) build binary masks on GPU via threshold
-      4) do a weighted blend in the overlap, and bitwise OR outside
-
-    img1, img2 : BGR uint8
-    H          : float32 homography (3×3) mapping img2 → img1 frame
-    canvas_size: (w,h) to force output size, or None to auto‐compute
-    alpha      : blend weight for img2 in the overlap region
+    Wykorzystuje całkowicie GPU, wejściem są obrazy GpuMat,
+    homografia g2->g1, ponadto jeszcze strumień dla GPU.
+    Dla finalnej implementacji, kiedy nie trzeba robić już dopasowań.
     """
-    # upload
+    # załaduj
 
     w1, h1 = g1.size()
     w2, h2 = g2.size()
 
 
-    # compute translation & canvas size if needed
+    # policz translację i rozmiar kanwy
     if canvas_size is None:
+        #liczy na podstawie obu rozmiarów obrazów wymagany do dopasowania
         pts1 = np.float32([[0,0],[w1,0],[w1,h1],[0,h1]]).reshape(-1,1,2)
         pts2 = np.float32([[0,0],[w2,0],[w2,h2],[0,h2]]).reshape(-1,1,2)
+        #perspective aby drugi nakładał się na pierwszy
         pts2t = cv.perspectiveTransform(pts2, H)
+        #dalej przekształcenia, żeby policzyć maksymalne i minimalne granice nowego obszaru
         all_pts = np.vstack([pts1, pts2t])
         x_min, y_min = np.int32(all_pts.min(axis=0).ravel() - 0.5)
         x_max, y_max = np.int32(all_pts.max(axis=0).ravel() + 0.5)
         trans = np.array([[1,0,-x_min],[0,1,-y_min],[0,0,1]],dtype=np.float32)
         out_w, out_h = x_max - x_min, y_max - y_min
     else:
+        #tutaj jak dajemy rozmiar kanwy, to nie liczy i po prostu przesuwa na miejsce
         trans = np.eye(3, dtype=np.float32)
         out_w, out_h = canvas_size
 
-    # warp both onto GPU canvas
+    # przesuń z homografią
     g1w = cv.cuda.warpPerspective(g1, trans,     (out_w, out_h),stream=stream)
     g2w = cv.cuda.warpPerspective(g2, trans @ H, (out_w, out_h),stream=stream)
 
-    # build masks by thresholding grayscale on GPU
+    # progowanie aby odnaleźć wspólny obrszar
     gray1 = cv.cuda.cvtColor(g1w, cv.COLOR_BGR2GRAY,stream=stream)
     gray2 = cv.cuda.cvtColor(g2w, cv.COLOR_BGR2GRAY,stream=stream)
     _, m1w = cv.cuda.threshold(gray1, 1, 255, cv.THRESH_BINARY,stream=stream)
     _, m2w = cv.cuda.threshold(gray2, 1, 255, cv.THRESH_BINARY,stream=stream)
 
-    # overlap region mask
+    #mieszenie na wspólnym obszarze
     overlap = cv.cuda.bitwise_and(m1w, m2w,stream=stream)
-
-    # simple blend in overlap
     blend = cv.cuda.addWeighted(g1w, 1-alpha, g2w, alpha, 0,stream=stream)
 
-    # non‐overlap contributions
+    # dodaj do siebie tamte fragmenty i otrzymaj końcowy obraz
     inv2 = cv.cuda.bitwise_not(m2w,stream=stream)
     inv1 = cv.cuda.bitwise_not(m1w,stream=stream)
     g1w = cv.cuda.bitwise_and(g1w, cv.cuda.cvtColor(inv2, cv.COLOR_GRAY2BGR),stream=stream)
     g2w = cv.cuda.bitwise_and(g2w, cv.cuda.cvtColor(inv1, cv.COLOR_GRAY2BGR),stream=stream)
     blend = cv.cuda.bitwise_and(blend, cv.cuda.cvtColor(overlap, cv.COLOR_GRAY2BGR),stream=stream)
 
-    # sum them up
+
     out = cv.cuda.add(g1w,g2w,stream=stream)
     out = cv.cuda.add(out, blend,stream=stream)
-    #stream.waitForCompletion()
+
     return out
 
 #DALSZE FRAGMENTY KODU DO SKOPIOWANIA W ALT_COLLECT_HOMO - TO SĄ DO WYZNACZENIA

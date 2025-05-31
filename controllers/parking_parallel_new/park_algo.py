@@ -12,158 +12,177 @@ MAX_WHEEL_ANGLE = 0.5  # rad
 CAR_WIDTH = 1.95
 CAR_LENGTH = 4.85
 MAX_SPEED = -3.0
-def normalize_angle(angle: float) -> float:
-    """
-    Zamienia dowolny kąt w radianach na równoważny w przedziale [-π, π).
-    """
-    # opcja z pętlami
-    while angle > math.pi:
-        angle -= 2 * math.pi
-    while angle <= -math.pi:
-        angle += 2 * math.pi
-    return angle
-
 class Parking:
-    def __init__(self,driver,side,times,min_width=CAR_WIDTH*1.1,min_length=CAR_LENGTH*1.25,threshold = 1*CAR_WIDTH):
-        self.min_width = min_width
-        self.min_length = min_length
-        self.threshold = threshold
-
-        self.state = "searching_start"
-        self.start_pose = None
-        self.spots = []
-        self.driver = driver
-
-        self.prev_distance_front = 0.0
-        self.prev_distance_rear = 0.0
-        self.side = side
-        self.x = 0.0
-        self.y = 0.0
-        self.yaw = 0.0
-        self.last_time = times
+    # Domyślne marginesy startu i końca manewru
+    marg_start = 0.2
+    marg_end   = 0.4
 
 
+    def __init__(self, driver, side, times,
+                 min_width=CAR_WIDTH*1.1,
+                 min_length=CAR_LENGTH*1.25,
+                 threshold=1*CAR_WIDTH):
+        # Inicjalizacja parametrów parkingu
+        self.min_width  = min_width       # minimalna szerokość miejsca
+        self.min_length = min_length      # minimalna długość miejsca
+        self.threshold  = threshold       # próg zmiany odległości
+
+        self.state           = "searching_start"  # aktualny stan maszyny stanów
+        self.start_pose      = None               # miejsce wykrycia początku luki
+        self.spots           = []                 # wykryte miejsca parkingowe
+        self.driver          = driver             # interfejs do samochodu w Webots
+        self.spot = None
+        # Pomocnicze zmienne do detekcji zmian odległości
+        self.prev_distance_front = 6.0
+        self.prev_distance_rear  = 6.0
+        self.dist_start_far      = 6.0
+        self.dist_start_cl       = 6.0
+        self.dist_end_far        = 6.0
+        self.dist_end_cl         = 6.0
+
+        self.side      = side    # strona parkowania: "left" lub "right"
+        self.x = 0.0             # os x w układzie globalnym
+        self.y = 0.0             # os y w układzie globalnym
+        self.yaw = 0.0           # orientacja pojazdu
+        self.last_time = times   # czas ostatniej aktualizacji
+
+        # Parametry regulatora PID dla sterowania
         self.Kp = 1.2
         self.Kd = 0.001
         self.Kl = 0.5
         self.prev_yaw_err = 0.0
-    def update_odometry(self,yaw):
-        # prędkość w m/s
 
-
-        # prędkość [m/s]
+    def update_odometry(self, yaw):
+        """
+        Aktualizuje pozycję (x,y) na podstawie prędkości i kąta yaw.
+        """
+        # Pobierz prędkość w km/h i przelicz na m/s
         v = self.driver.getCurrentSpeed() / 3.6
 
-        # integracja
+        # Integracja prostokątna z krokiem czasowym 0.05s
         self.yaw = yaw
-        dx = v * math.cos(self.yaw) * 0.05
-        dy = v * math.sin(self.yaw) * 0.05
+        dx = v * math.cos(self.yaw) * 0.06
+        dy = v * math.sin(self.yaw) * 0.06
         self.x += dx
         self.y += dy
 
-        # debug
-        #print(f"v={v:.2f}m/s → dx={dx:.2f}, dy={dy:.2f} | x={self.x:.2f}, y={self.y:.2f}")
         return (self.x, self.y, self.yaw)
 
-    def update_state(self, dists_names,yaw):
+    def update_state(self, dists_names, yaw):
+        """
+        Maszyna stanów wykrywająca luki parkingowe.
+        """
+        # Wybór odpowiednich czujników w zależności od strony
         if self.side == "left":
             distance_front = dists_names["distance sensor left front side"]
-            distance_rear = dists_names["distance sensor left side"]
-            delta_front = distance_front - self.prev_distance_front
-            delta_rear = distance_rear - self.prev_distance_rear
-            self.prev_distance_front = distance_front
-            self.prev_distance_rear = distance_rear
-        elif self.side == "right":
+            distance_rear  = dists_names["distance sensor left side"]
+        else:  # self.side == "right"
             distance_front = dists_names["distance sensor right front side"]
-            distance_rear = dists_names["distance sensor right side"]
-            delta_front = distance_front - self.prev_distance_front
-            delta_rear = distance_rear - self.prev_distance_rear
-            self.prev_distance_front = distance_front
-            self.prev_distance_rear = distance_rear
+            distance_rear  = dists_names["distance sensor right side"]
 
+        # Oblicz zmiany odległości
+        delta_front = distance_front - self.prev_distance_front
+        delta_rear  = distance_rear  - self.prev_distance_rear
+        self.prev_distance_front = distance_front
+        self.prev_distance_rear  = distance_rear
 
+        # Aktualizuj pozycję z odometrii
         odom_pose = self.update_odometry(yaw)
-        # projekcja punktu bocznego na mapę
         x, y, yaw = odom_pose
-        #print(f"wsp. x: {x:.2f}, wsp. y: {y:.2f}, skret: {yaw:.2f}")
+        #print(f"Odometria : {odom_pose}")
+        # Stan: poszukiwanie początku luki
         if self.state == "searching_start":
-
-            # czy odległość gwałtownie spadła?
             if delta_front > self.threshold:
-                # zapamiętujemy początek miejsca
-                self.start_pose = odom_pose
-                self.state = "searching_progress"
+                # Znaleziono gwałtowny wzrost odległości ⇒ początek luki
+                self.start_pose      = (x - self.marg_start, y, yaw)
+                self.dist_start_far  = distance_front
+                self.dist_start_cl   = self.prev_distance_front
+                self.state           = "searching_progress"
                 print("Kandydat na miejsce znaleziony.")
-        elif self.state == "searching_progress":
-            # czy odległość wzrosła z powrotem?
-            if -delta_front > self.threshold:
-                end_pose = odom_pose
-                spot = self._make_spot(self.start_pose, end_pose)
-                if spot is not None:
-                    self.spots.append(spot)
-                    print("Miejsce znalezione!!!")
-                    print(spot)
-                    self.state = "waiting_for_park"
-                    return odom_pose,spot
-                    #self.exec_path(odom_pose,spot,distance_front)
-                elif spot is None:
-                    print("Miejsce okazało się za małe.")
 
+        # Stan: poszukiwanie końca luki
+        elif self.state == "searching_progress":
+
+            if -delta_front > self.threshold:
+                # Znaleziono gwałtowny spadek odległości ⇒ koniec luki
+                end_pose = (x + self.marg_end, y, yaw)
+                self.dist_end_far = distance_front
+                self.dist_end_cl  = distance_front - delta_front
+
+                # Utwórz obiekt miejsca parkingowego
+                spot = self._make_spot(self.start_pose, end_pose)
+                if spot:
+                    self.state = "waiting_for_park"
+                    self.spot = spot
+                    print("Miejsce znalezione. Wciśnij Y, aby rozpocząć parkowanie. (NIE ZALECANE, NIE UMIE PARKOWAĆ)", spot)
+                else:
+                    print("Miejsce okazało się za małe.")
                     self.state = "searching_start"
 
-                # resetujemy do kolejnej detekcji
+        if self.spot is not None: return odom_pose, self.spot
+
+    @staticmethod
+    def normalize_angle(angle: float) -> float:
+        while angle > math.pi:
+            angle -= 2*math.pi
+        while angle <= -math.pi:
+            angle += 2*math.pi
+        return angle
 
     def exec_path(self, curr_pose, end_pose, lateral_dist):
-        # curr_pose = (x, y, yaw), end_pose = (x_end,y_end,yaw_end)
-        x, y, yaw = curr_pose
-        x_e, y_e, yaw_e = end_pose
+        """
+        Generuje sterowanie pojazdem do osiągnięcia end_pose. Przykładowe, póki co nie działa.
+        """
+        x, y, yaw   = curr_pose
+        x_e, y_e, _ = end_pose
 
-        # Kąt do mety
+        # Oblicz kąt do punktu docelowego i błąd yaw
         target_yaw = math.atan2(y_e - y, x_e - x)
-        yaw_err = normalize_angle(target_yaw - yaw)
+        yaw_err = self.normalize_angle(target_yaw - yaw)
 
-        # odległość do mety
+        # Odległość do celu
         dist_forward = math.hypot(x_e - x, y_e - y)
 
-
-        steer = self.Kp*yaw_err + self.Kd*(yaw_err - self.prev_yaw_err)
+        # Regulator PD dla yaw
+        steer = self.Kp * yaw_err + self.Kd * (yaw_err - self.prev_yaw_err)
         self.prev_yaw_err = yaw_err
 
+        # Ustaw kąty sterowania i prędkość
         self.driver.setSteeringAngle(steer)
-        # self.driver.setCruisingSpeed(min(dist_forward*0.5, MAX_SPEED))
         self.driver.setCruisingSpeed(MAX_SPEED)
-        # korygować lateralnie, trzymając odległość od krawężnika:
-        # jeśli lateral_dist != desired (np. 1.0m), deltalat = lateral_dist - desired
-        deltalat = lateral_dist - (CAR_WIDTH/2 + 0.1)  # 20cm odległości od krawężnika
+
+        # Dodatkowa korekcja boczna (trzymanie od krawężnika)
+        deltalat = lateral_dist - (CAR_WIDTH/2 + 0.1)
         steer += self.Kl * deltalat
         self.driver.setSteeringAngle(steer)
+
     def _make_spot(self, start, end):
         """
-        Na podstawie dwóch poz. pojazdu tworzy kandydat na miejsce:
-        start, end: (x, y, heading)
-        Zwraca ((x1,y1),(x2,y2)) — współrzędne końców krawędzi równoległej do boku,
-        lub None, jeśli rozmiar < min_length.
+        Tworzy opis miejsca parkingowego na podstawie pozycji start/end.
         """
-        x0, y0, yaw0 = start
-        x1, y1, yaw1 = end
-
-        # wektor kierunku boku pojazdu (prostopadły do osi long.)
-        # heading = kąt podłużnej osi pojazdu od osi X
-
-        dx = math.cos(yaw0 + math.pi/2)
-        dy = math.sin(yaw0 + math.pi/2)
-
-        # punkty graniczne wzdłuż boku
-        p_start = (x0 + dx * self.min_width/2, y0 + dy * self.min_width/2)
-        p_end   = (x1 + dx * self.min_width/2, y1 + dy * self.min_width/2)
-
-        # długość wzdłuż ruchu pojazdu
-        length = math.hypot(x1 - x0, y1 - y0)
-        if length < self.min_length:
-
+        sp_len = end[0] - start[0]
+        if sp_len < self.min_width:
             return None
-        p_start
-        return (p_start, p_end)
+
+        # Szerokość miejsca na podstawie różnicy odczytów sonaru
+        sp_wid = ((self.dist_start_far - self.dist_start_cl) +
+                  (self.dist_end_far   - self.dist_end_cl)) / 2
+
+        # Środek luki parkingowej
+        sp_cen_x = start[0] + sp_len / 2
+        sp_cen_y = start[1] + (self.dist_start_cl + self.dist_start_far) / 2
+
+        # Ustawienie w zależności od strony parkowania
+        if self.side == "left":
+            sen_pos = [3.515873,  0.865199,  90]
+        elif self.side == "right":
+            sen_pos = [3.515873, -0.865199, -90]
+
+        # Punkt końcowy manewru
+        x_end = sp_cen_x + sen_pos[0] - 1.425
+        y_end = sp_cen_y + sen_pos[1]
+
+        return [x_end, y_end, start[2]]
 
     def get_spots(self):
         """Zwraca listę wykrytych miejsc parkingowych."""
@@ -171,32 +190,37 @@ class Parking:
 
 
 class LivePlotter:
-    def __init__(self, max_points=100):
+    def __init__(self, ax, max_points=100):
+        # Inicjalizacja wykresu: ograniczenia i etykiety
         self.max_points = max_points
-        self.data = []
-        self.fig, self.ax = plt.subplots()
-        self.line, = self.ax.plot([], [], 'r-')
+        self.data       = []
+        self.ax         = ax
+        self.line,     = self.ax.plot([], [], 'r-')
         self.ax.set_xlim(0, self.max_points)
-        self.ax.set_ylim(-10, 10)  # dopasuj do zakresu swojego czujnika
+        self.ax.set_ylim(-10, 10)
         self.ax.set_title("Wartości z czujnika na żywo")
         self.ax.set_xlabel("Pomiar")
         self.ax.set_ylabel("Wartość")
         self.val = 0.0
-    def update(self, frame):
-        # Tu pobierasz dane z czujnika — zastąp ten fragment swoim odczytem!
-        sensor_value = self.val
+
+    def update(self, frame=None):
+        """
+        Aktualizacja danych na wykresie w czasie rzeczywistym.
+        """
+        sensor_value = self.val          # pobierz aktualną wartość czujnika
         self.data.append(sensor_value)
         if len(self.data) > self.max_points:
             self.data.pop(0)
         xdata = list(range(len(self.data)))
         ydata = self.data
+
+        # Zaktualizuj dane linii i zakres osi
         self.line.set_data(xdata, ydata)
         self.ax.set_xlim(0, max(self.max_points, len(self.data)))
-        # Opcjonalnie: dynamiczne skalowanie osi Y
         self.ax.set_ylim(min(ydata) - 1, max(ydata) + 1)
         return (self.line,)
 
 
-    def run(self):
-        ani = animation.FuncAnimation(self.fig, self.update,interval=100, blit=True)
-        plt.show()
+    #def run(self):
+        #ani = animation.FuncAnimation(self.fig, self.update,interval=100, blit=True)
+        #plt.show()

@@ -1,0 +1,160 @@
+{\rtf1\ansi\deff0\deftab480
+
+{\fonttbl
+{\f000 Courier New;}
+{\f001 Courier New;}
+{\f002 Courier New;}
+{\f003 Courier New;}
+{\f004 Courier New;}
+{\f005 Courier New;}
+{\f006 Courier New;}
+{\f007 Courier New;}
+{\f008 Courier New;}
+{\f009 Courier New;}
+{\f010 Courier New;}
+{\f011 Courier New;}
+{\f012 Courier New;}
+{\f013 Courier New;}
+}
+
+{\colortbl
+\red000\green000\blue000;
+\red255\green255\blue255;
+\red000\green128\blue000;
+\red255\green255\blue255;
+\red255\green000\blue000;
+\red255\green255\blue255;
+\red128\green128\blue128;
+\red255\green255\blue255;
+\red000\green000\blue255;
+\red255\green255\blue255;
+\red255\green128\blue000;
+\red255\green255\blue255;
+\red000\green000\blue000;
+\red255\green255\blue255;
+\red255\green000\blue255;
+\red255\green255\blue255;
+\red000\green000\blue128;
+\red255\green255\blue255;
+\red000\green000\blue000;
+\red255\green255\blue255;
+\red136\green000\blue136;
+\red255\green255\blue255;
+\red128\green128\blue128;
+\red255\green255\blue255;
+\red255\green128\blue000;
+\red255\green255\blue255;
+\red000\green000\blue000;
+\red255\green255\blue255;
+}
+
+\f6029427\fs20\cb27\cf26 \highlight1\cf0 \par
+\highlight9\cf8\b class\highlight1\cf0\b0  \highlight13\cf12\b Parking\highlight17\cf16 :\highlight1\cf0\b0 \par
+    \highlight3\cf2 # Domy\u347?lne marginesy startu i ko\u324?ca manewru\highlight1\cf0 \par
+    \highlight19\cf18 marg_start\highlight1\cf0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 0.2\highlight1\cf0 \par
+    \highlight19\cf18 marg_end\highlight1\cf0    \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 0.4\highlight1\cf0 \par
+    \par
+        \par
+    \highlight9\cf8\b def\highlight1\cf0\b0  \highlight15\cf14 __init__\highlight17\cf16\b (\highlight19\cf18\b0 self\highlight17\cf16\b ,\highlight1\cf0\b0  \highlight19\cf18 driver\highlight17\cf16\b ,\highlight1\cf0\b0  \highlight19\cf18 side\highlight17\cf16\b ,\highlight1\cf0\b0  \highlight19\cf18 times\highlight17\cf16\b ,\highlight1\cf0\b0 \par
+                 \highlight19\cf18 min_width\highlight17\cf16\b =\highlight19\cf18\b0 CAR_WIDTH\highlight17\cf16\b *\highlight5\cf4\b0 1.1\highlight17\cf16\b ,\highlight1\cf0\b0 \par
+                 \highlight19\cf18 min_length\highlight17\cf16\b =\highlight19\cf18\b0 CAR_LENGTH\highlight17\cf16\b *\highlight5\cf4\b0 1.25\highlight17\cf16\b ,\highlight1\cf0\b0 \par
+                 \highlight19\cf18 threshold\highlight17\cf16\b =\highlight5\cf4\b0 1\highlight17\cf16\b *\highlight19\cf18\b0 CAR_WIDTH\highlight17\cf16\b ):\highlight1\cf0\b0 \par
+        \highlight3\cf2 # Inicjalizacja parametr\u243?w parkingu\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 min_width\highlight1\cf0\i0   \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 min_width\highlight1\cf0        \highlight3\cf2 # minimalna szeroko\u347?\u263? miejsca\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 min_length\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 min_length\highlight1\cf0       \highlight3\cf2 # minimalna d\u322?ugo\u347?\u263? miejsca\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 threshold\highlight1\cf0\i0   \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 threshold\highlight1\cf0        \highlight3\cf2 # pr\u243?g zmiany odleg\u322?o\u347?ci\highlight1\cf0 \par
+\par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 state\highlight1\cf0\i0            \highlight17\cf16\b =\highlight1\cf0\b0  \highlight7\cf6 "searching_start"\highlight1\cf0   \highlight3\cf2 # aktualny stan maszyny stan\u243?w\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 start_pose\highlight1\cf0\i0       \highlight17\cf16\b =\highlight1\cf0\b0  \highlight21\cf20\b None\highlight1\cf0\b0                \highlight3\cf2 # miejsce wykrycia pocz\u261?tku luki\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 spots\highlight1\cf0\i0            \highlight17\cf16\b =\highlight1\cf0\b0  \highlight17\cf16\b []\highlight1\cf0\b0                  \highlight3\cf2 # wykryte miejsca parkingowe\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 driver\highlight1\cf0\i0           \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 driver\highlight1\cf0              \highlight3\cf2 # interfejs do samochodu w Webots\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 spot\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight21\cf20\b None\highlight1\cf0\b0 \par
+        \highlight3\cf2 # Pomocnicze zmienne do detekcji zmian odleg\u322?o\u347?ci\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 prev_distance_front\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 6.0\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 prev_distance_rear\highlight1\cf0\i0   \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 6.0\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 dist_start_far\highlight1\cf0\i0       \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 6.0\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 dist_start_cl\highlight1\cf0\i0        \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 6.0\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 dist_end_far\highlight1\cf0\i0         \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 6.0\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 dist_end_cl\highlight1\cf0\i0          \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 6.0\highlight1\cf0 \par
+\par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 side\highlight1\cf0\i0       \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 side\highlight1\cf0     \highlight3\cf2 # strona parkowania: "left" lub "right"\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 x\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 0.0\highlight1\cf0              \highlight3\cf2 # os x w uk\u322?adzie globalnym\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 y\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 0.0\highlight1\cf0              \highlight3\cf2 # os y w uk\u322?adzie globalnym\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 yaw\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 0.0\highlight1\cf0            \highlight3\cf2 # orientacja pojazdu\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 last_time\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 times\highlight1\cf0    \highlight3\cf2 # czas ostatniej aktualizacji\highlight1\cf0 \par
+\par
+        \highlight3\cf2 # Parametry regulatora PID dla sterowania\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 Kp\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 1.2\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 Kd\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 0.001\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 Kl\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 0.5\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 prev_yaw_err\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight5\cf4 0.0\highlight1\cf0 \par
+\par
+    \highlight9\cf8\b def\highlight1\cf0\b0  \highlight15\cf14 update_odometry\highlight17\cf16\b (\highlight19\cf18\b0 self\highlight17\cf16\b ,\highlight1\cf0\b0  \highlight19\cf18 yaw\highlight17\cf16\b ):\highlight1\cf0\b0 \par
+        \highlight11\cf10 """\par
+        Aktualizuje pozycj\u281? (x,y) na podstawie pr\u281?dko\u347?ci i k\u261?ta yaw.\par
+        """\highlight1\cf0 \par
+        \highlight3\cf2 # Pobierz pr\u281?dko\u347?\u263? w km/h i przelicz na m/s\highlight1\cf0 \par
+        \highlight19\cf18 v\highlight1\cf0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 driver\highlight17\cf16\b\i0 .\highlight25\cf24\b0\i0 getCurrentSpeed\highlight17\cf16\b\i0 ()\highlight1\cf0\b0  \highlight17\cf16\b /\highlight1\cf0\b0  \highlight5\cf4 3.6\highlight1\cf0 \par
+\par
+        \highlight3\cf2 # Integracja prostok\u261?tna z krokiem czasowym 0.05s\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 yaw\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 yaw\highlight1\cf0 \par
+        \highlight19\cf18 dx\highlight1\cf0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 v\highlight1\cf0  \highlight17\cf16\b *\highlight1\cf0\b0  \highlight19\cf18 math\highlight17\cf16\b .\highlight25\cf24\b0\i0 cos\highlight17\cf16\b\i0 (\highlight19\cf18\b0 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 yaw\highlight17\cf16\b\i0 )\highlight1\cf0\b0  \highlight17\cf16\b *\highlight1\cf0\b0  \highlight5\cf4 0.06\highlight1\cf0 \par
+        \highlight19\cf18 dy\highlight1\cf0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 v\highlight1\cf0  \highlight17\cf16\b *\highlight1\cf0\b0  \highlight19\cf18 math\highlight17\cf16\b .\highlight25\cf24\b0\i0 sin\highlight17\cf16\b\i0 (\highlight19\cf18\b0 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 yaw\highlight17\cf16\b\i0 )\highlight1\cf0\b0  \highlight17\cf16\b *\highlight1\cf0\b0  \highlight5\cf4 0.06\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 x\highlight1\cf0\i0  \highlight17\cf16\b +=\highlight1\cf0\b0  \highlight19\cf18 dx\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 y\highlight1\cf0\i0  \highlight17\cf16\b +=\highlight1\cf0\b0  \highlight19\cf18 dy\highlight1\cf0 \par
+\par
+        \highlight9\cf8\b return\highlight1\cf0\b0  \highlight17\cf16\b (\highlight19\cf18\b0 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 x\highlight17\cf16\b\i0 ,\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 y\highlight17\cf16\b\i0 ,\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 yaw\highlight17\cf16\b\i0 )\highlight1\cf0\b0 \par
+\par
+    \highlight9\cf8\b def\highlight1\cf0\b0  \highlight15\cf14 update_state\highlight17\cf16\b (\highlight19\cf18\b0 self\highlight17\cf16\b ,\highlight1\cf0\b0  \highlight19\cf18 dists_names\highlight17\cf16\b ,\highlight1\cf0\b0  \highlight19\cf18 yaw\highlight17\cf16\b ):\highlight1\cf0\b0 \par
+        \highlight11\cf10 """\par
+        Maszyna stan\u243?w wykrywaj\u261?ca luki parkingowe.\par
+        """\highlight1\cf0 \par
+        \highlight3\cf2 # Wyb\u243?r odpowiednich czujnik\u243?w w zale\u380?no\u347?ci od strony\highlight1\cf0 \par
+        \highlight9\cf8\b if\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 side\highlight1\cf0\i0  \highlight17\cf16\b ==\highlight1\cf0\b0  \highlight7\cf6 "left"\highlight17\cf16\b :\highlight1\cf0\b0 \par
+            \highlight19\cf18 distance_front\highlight1\cf0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 dists_names\highlight17\cf16\b [\highlight7\cf6\b0 "distance sensor left front side"\highlight17\cf16\b ]\highlight1\cf0\b0 \par
+            \highlight19\cf18 distance_rear\highlight1\cf0   \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 dists_names\highlight17\cf16\b [\highlight7\cf6\b0 "distance sensor left side"\highlight17\cf16\b ]\highlight1\cf0\b0 \par
+        \highlight9\cf8\b else\highlight17\cf16 :\highlight1\cf0\b0   \highlight3\cf2 # self.side == "right"\highlight1\cf0 \par
+            \highlight19\cf18 distance_front\highlight1\cf0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 dists_names\highlight17\cf16\b [\highlight7\cf6\b0 "distance sensor right front side"\highlight17\cf16\b ]\highlight1\cf0\b0 \par
+            \highlight19\cf18 distance_rear\highlight1\cf0   \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 dists_names\highlight17\cf16\b [\highlight7\cf6\b0 "distance sensor right side"\highlight17\cf16\b ]\highlight1\cf0\b0 \par
+\par
+        \highlight3\cf2 # Oblicz zmiany odleg\u322?o\u347?ci\highlight1\cf0 \par
+        \highlight19\cf18 delta_front\highlight1\cf0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 distance_front\highlight1\cf0  \highlight17\cf16\b -\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 prev_distance_front\highlight1\cf0\i0 \par
+        \highlight19\cf18 delta_rear\highlight1\cf0   \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 distance_rear\highlight1\cf0   \highlight17\cf16\b -\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 prev_distance_rear\highlight1\cf0\i0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 prev_distance_front\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 distance_front\highlight1\cf0 \par
+        \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 prev_distance_rear\highlight1\cf0\i0   \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 distance_rear\highlight1\cf0 \par
+\par
+        \highlight3\cf2 # Aktualizuj pozycj\u281? z odometrii\highlight1\cf0 \par
+        \highlight19\cf18 odom_pose\highlight1\cf0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 update_odometry\highlight17\cf16\b\i0 (\highlight19\cf18\b0 yaw\highlight17\cf16\b )\highlight1\cf0\b0 \par
+        \highlight19\cf18 x\highlight17\cf16\b ,\highlight1\cf0\b0  \highlight19\cf18 y\highlight17\cf16\b ,\highlight1\cf0\b0  \highlight19\cf18 yaw\highlight1\cf0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 odom_pose\highlight1\cf0 \par
+        \highlight21\cf20\b print\highlight17\cf16 (\highlight23\cf22\b0 f"Odometria : \{\highlight19\cf18 odom_pose\highlight23\cf22 \}"\highlight17\cf16\b )\highlight1\cf0\b0 \par
+        \highlight3\cf2 # Stan: poszukiwanie pocz\u261?tku luki\highlight1\cf0 \par
+        \highlight9\cf8\b if\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 state\highlight1\cf0\i0  \highlight17\cf16\b ==\highlight1\cf0\b0  \highlight7\cf6 "searching_start"\highlight17\cf16\b :\highlight1\cf0\b0 \par
+            \highlight9\cf8\b if\highlight1\cf0\b0  \highlight19\cf18 delta_front\highlight1\cf0  \highlight17\cf16\b >\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 threshold\highlight17\cf16\b\i0 :\highlight1\cf0\b0 \par
+                \highlight3\cf2 # Znaleziono gwa\u322?towny wzrost odleg\u322?o\u347?ci \u8658? pocz\u261?tek luki\highlight1\cf0 \par
+                \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 start_pose\highlight1\cf0\i0       \highlight17\cf16\b =\highlight1\cf0\b0  \highlight17\cf16\b (\highlight19\cf18\b0 x\highlight1\cf0  \highlight17\cf16\b -\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 marg_start\highlight17\cf16\b\i0 ,\highlight1\cf0\b0  \highlight19\cf18 y\highlight17\cf16\b ,\highlight1\cf0\b0  \highlight19\cf18 yaw\highlight17\cf16\b )\highlight1\cf0\b0 \par
+                \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 dist_start_far\highlight1\cf0\i0   \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 distance_front\highlight1\cf0 \par
+                \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 dist_start_cl\highlight1\cf0\i0    \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 prev_distance_front\highlight1\cf0\i0 \par
+                \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 state\highlight1\cf0\i0            \highlight17\cf16\b =\highlight1\cf0\b0  \highlight7\cf6 "searching_progress"\highlight1\cf0 \par
+                \highlight21\cf20\b print\highlight17\cf16 (\highlight7\cf6\b0 "Kandydat na miejsce znaleziony."\highlight17\cf16\b )\highlight1\cf0\b0 \par
+\par
+        \highlight3\cf2 # Stan: poszukiwanie ko\u324?ca luki\highlight1\cf0 \par
+        \highlight9\cf8\b elif\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 state\highlight1\cf0\i0  \highlight17\cf16\b ==\highlight1\cf0\b0  \highlight7\cf6 "searching_progress"\highlight17\cf16\b :\highlight1\cf0\b0 \par
+            \par
+            \highlight9\cf8\b if\highlight1\cf0\b0  \highlight17\cf16\b -\highlight19\cf18\b0 delta_front\highlight1\cf0  \highlight17\cf16\b >\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 threshold\highlight17\cf16\b\i0 :\highlight1\cf0\b0 \par
+                \highlight3\cf2 # Znaleziono gwa\u322?towny spadek odleg\u322?o\u347?ci \u8658? koniec luki\highlight1\cf0 \par
+                \highlight19\cf18 end_pose\highlight1\cf0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight17\cf16\b (\highlight19\cf18\b0 x\highlight1\cf0  \highlight17\cf16\b +\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 marg_end\highlight17\cf16\b\i0 ,\highlight1\cf0\b0  \highlight19\cf18 y\highlight17\cf16\b ,\highlight1\cf0\b0  \highlight19\cf18 yaw\highlight17\cf16\b )\highlight1\cf0\b0 \par
+                \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 dist_end_far\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 distance_front\highlight1\cf0 \par
+                \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 dist_end_cl\highlight1\cf0\i0   \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 distance_front\highlight1\cf0  \highlight17\cf16\b -\highlight1\cf0\b0  \highlight19\cf18 delta_front\highlight1\cf0 \par
+\par
+                \highlight3\cf2 # Utw\u243?rz obiekt miejsca parkingowego\highlight1\cf0 \par
+                \highlight19\cf18 spot\highlight1\cf0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 _make_spot\highlight17\cf16\b\i0 (\highlight19\cf18\b0 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 start_pose\highlight17\cf16\b\i0 ,\highlight1\cf0\b0  \highlight19\cf18 end_pose\highlight17\cf16\b )\highlight1\cf0\b0 \par
+                \highlight9\cf8\b if\highlight1\cf0\b0  \highlight19\cf18 spot\highlight17\cf16\b :\highlight1\cf0\b0 \par
+                    \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 state\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight7\cf6 "waiting_for_park"\highlight1\cf0 \par
+                    \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 spot\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight19\cf18 spot\highlight1\cf0 \par
+                    \highlight21\cf20\b print\highlight17\cf16 (\highlight7\cf6\b0 "Miejsce znalezione. Wci\u347?nij Y, aby rozpocz\u261?\u263? parkowanie."\highlight17\cf16\b ,\highlight1\cf0\b0  \highlight19\cf18 spot\highlight17\cf16\b )\highlight1\cf0\b0 \par
+                \highlight9\cf8\b else\highlight17\cf16 :\highlight1\cf0\b0 \par
+                    \highlight21\cf20\b print\highlight17\cf16 (\highlight7\cf6\b0 "Miejsce okaza\u322?o si\u281? za ma\u322?e."\highlight17\cf16\b )\highlight1\cf0\b0 \par
+                    \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 state\highlight1\cf0\i0  \highlight17\cf16\b =\highlight1\cf0\b0  \highlight7\cf6 "searching_start"\highlight1\cf0 \par
+       \par
+        \highlight9\cf8\b if\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 spot\highlight1\cf0\i0  \highlight9\cf8\b is\highlight1\cf0\b0  \highlight9\cf8\b not\highlight1\cf0\b0  \highlight21\cf20\b None\highlight17\cf16 :\highlight1\cf0\b0  \highlight9\cf8\b return\highlight1\cf0\b0  \highlight19\cf18 odom_pose\highlight17\cf16\b ,\highlight1\cf0\b0  \highlight19\cf18 self\highlight17\cf16\b .\highlight25\cf24\b0\i0 spot\highlight1\cf0\i0  \par
+}
