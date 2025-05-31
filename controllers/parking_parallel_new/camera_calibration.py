@@ -6,14 +6,7 @@ import sys
 CAMERA_HEIGHT=2160
 CAMERA_WIDTH=3840
 
-# Vehicle parameters
-TRACK_FRONT = 1.628
-TRACK_REAR = 1.628
-WHEELBASE = 2.995
-MAX_WHEEL_ANGLE = 0.5  # rad
-WHEEL_RADIUS = 0.374
 import visualise as vis
-
 
 def average_chessboard_size(corners, pattern_size):
     """
@@ -40,6 +33,7 @@ def average_chessboard_size(corners, pattern_size):
             idx2 = idx1 + cols
             dist = np.linalg.norm(corners[idx1] - corners[idx2])
             vertical_lengths.append(dist)
+
     width_lengths = []
     for row in range(rows):
         start_idx = row * cols
@@ -63,15 +57,9 @@ def average_chessboard_size(corners, pattern_size):
 
 def solve_camera_pose(image, pattern_size, K, camera_name,show=True):
     """
-    Estimate camera pose using a chessboard pattern with solvePnP.
-
-    :param image: input BGR image from Webots camera
-    :param pattern_size: tuple of (cols, rows) in the chessboard (e.g., (5, 7))
-    :param square_size: size of a square in meters (e.g., 0.03 for 3cm)
-    :param K: intrinsic camera matrix
-    :param camera_name: name for logging
-    :param show: whether to display the detection
-    :return: R (3x3), t (3x1), or None if not found
+    Zwraca pozę kamery, R i tvec, później można zbudować macierz jednorodną.
+    Przyjmuje obraz z kamery, rozmiar szachownicy, jej parametry wewnętrzne.
+    Nazwa camera_name do wizualizacji i debugowania.
 
     wszystkie punkty wymiarowania szachownic są liczone
     od lewego górnego odnalezionego przez algorytm - w metrach
@@ -336,7 +324,8 @@ def warp_images(img1, img2, homography):
     """
     Przekształca obrazy homografią i wykorzystuje feather-blender dla dopasowania na krańcach.
     Trochę dorobiona wersja z github repo 360ls/stitcher
-    Nie jest najszybsza, ponieważ na CPU
+    Nie jest najszybsza, ponieważ na CPU.
+    Na jej podstawie przerobiono funkcję warp_and_blend_gpu w pliku visualise.py
     """
     rows1, cols1 = img1.shape[:2]
     rows2, cols2 = img2.shape[:2]
@@ -372,6 +361,7 @@ def warp_images(img1, img2, homography):
     blender.feed(warped_img2.astype(np.int16), mask2, (0, 0))
     result, _ = blender.blend(None, None)
 
+    #albo tutaj poniżej, jeżeli wystarczy po prostu uśrednić
     #result = mean_blend_1(shifted_img1,wapred_img2)
     return np.clip(result, 0, 255).astype(np.uint8)
 
@@ -488,8 +478,6 @@ def cuda_bgr_to_gray(img):
     return gray
 
 
-
-
 def gaussian_blur_cuda(image, ksize, sigma):
     """
     Funkcja do nałożenia gaussowskiego rozmycia.
@@ -564,8 +552,9 @@ def compute_reprojection_error(H, src_points, dst_points):
 
 def chess_homography(img1, img2, pattern_size,margin=200):
     """
-    Jedna z najważniejszych funkcji w tym pliku. Na podstawie znalezionej szachownicy na jednym obrazie
-    oraz drugim pozwala wyznaczyć homografię. Wyposażona w zabezpieczenie przez znalezieniem innych szachownic po wykryciu, czyli
+    Na podstawie znalezionej szachownicy na jednym obrazie
+    oraz drugim pozwala wyznaczyć homografię. Wyposażona w zabezpieczenie przez znalezieniem
+    innych szachownic po wykryciu, czyli
     mocuje się na jednej już znalezionej.
     Na wejście wchodzą dwa obrazy: źródłowy i docelowy; wymiary szachownicy; opcjonalnie
     odstęp dla zamaskowania obszaru wokół szachownicy.
@@ -575,8 +564,6 @@ def chess_homography(img1, img2, pattern_size,margin=200):
     łatwo jest zmienić rozdzielczość kamery, ale w rzeczywistym świecie taka zmiana
     spowodowałaby stratę precyzji.
     """
-    #gray1 = cv.cvtColor(img1, cv.COLOR_BGR2GRAY)
-    #gray2 = cv.cvtColor(img2, cv.COLOR_BGR2GRAY)
 
     gray1 = cv.cvtColor(img1, cv.COLOR_RGB2GRAY)
     gray2 = cv.cvtColor(img2, cv.COLOR_RGB2GRAY)
@@ -621,7 +608,7 @@ def chess_homography(img1, img2, pattern_size,margin=200):
     corners1 = cv.cornerSubPix(gray1, corners1, (21, 21), (-1, -1), criteria)
     corners2 = cv.cornerSubPix(gray2, corners2, (21, 21), (-1, -1), criteria)
 
-    # Homografia
+    # homografia
     H, _ = cv.findHomography(corners1, corners2,cv.RANSAC,2.0)
 
     H = H.astype(np.float32)
@@ -641,13 +628,13 @@ def chess_homography(img1, img2, pattern_size,margin=200):
     # Pokaz obrazów
     cv.namedWindow("Image 1 - detected corners", cv.WINDOW_NORMAL)
     cv.imshow("Image 1 - detected corners", img1_draw)
-    cv.imwrite("img111.png",img1_draw)
+    #cv.imwrite("img111.png",img1_draw)
     cv.namedWindow("Image 2 - detected corners", cv.WINDOW_NORMAL)
     cv.imshow("Image 2 - detected corners", img2_draw)
-    cv.imwrite("img222.png",img2_draw)
+    #cv.imwrite("img222.png",img2_draw)
     cv.namedWindow("Warped image 1 to image 2", cv.WINDOW_NORMAL)
     cv.imshow("Warped image 1 to image 2", cv.cvtColor(warped_img,cv.COLOR_BGR2RGB))
-    cv.imwrite("img333.png",cv.cvtColor(warped_img,cv.COLOR_BGR2RGB))
+    #cv.imwrite("img333.png",cv.cvtColor(warped_img,cv.COLOR_BGR2RGB))
 
     return H, warped_img
 
@@ -708,9 +695,6 @@ def chess_homography_multiple_boards(img1, img2, pattern_size,second_patt_size,m
         corners1_combined = corners1.copy()
         corners2_combined = corners2.copy()
 
-
-
-
     # Homografia
     H, _ = cv.findHomography(
     corners1_combined,
@@ -762,7 +746,9 @@ def save_homo(homography, homography_filename):
 
 def solve_chess_size(image, name,pattern_size,pattern_size2,second=False):
     """
-
+    Policz rozmiar szachownicy i zwróc punkty. Pozwala na drugą szachownicę równiez.
+    Pomocne dla policzenia pozy szachownicy, nie korzystać do homografii, ponieważ
+    jest w niej za dużo elementów nie służących do sporządzenia homografii.
     """
 
     #h,w = shape #rozmiar docelowego obrazu
@@ -779,22 +765,6 @@ def solve_chess_size(image, name,pattern_size,pattern_size2,second=False):
         #print(corners)
 
         img_draw = cv.drawChessboardCorners(image,pattern_size, corners_new, ret)
-
-        # Pokaz obrazów
-
-
-        """
-        avg_w, avg_h,w,h = average_chessboard_size(corners_new, pattern_size)
-
-
-        print(f"Szerokość klatki: {avg_w}")
-        print(f"Wysokość klatki: {avg_h}")
-        print(f"Szerokość wysokość szachownicy w pikselach: {(w,h)}")
-
-        scale_x = w_m/w
-        scale_y = h_m/h
-        print(f"Jak w x,y przeskalować obraz: {(scale_x,scale_y)}")
-        """
         cols, rows = pattern_size
 
         top_left = corners_new[0]
@@ -809,7 +779,6 @@ def solve_chess_size(image, name,pattern_size,pattern_size2,second=False):
             bottom_left
         ], dtype=np.float32)
 
-
         if second:
             x1, y1, w1, h1 = cv.boundingRect(corners_4)
             x1_crop, y1_crop, w1_crop, h1_crop = expand_bbox_fixed(x1, y1, w1, h1, 200, gray.shape)
@@ -821,6 +790,7 @@ def solve_chess_size(image, name,pattern_size,pattern_size2,second=False):
 
             corners_combined = []
             if ret_ and (not np.array_equal(corners_new, corners_)):
+                #narożniki dla drugiej szachownicy
                 corners_ = cv.cornerSubPix(img_masked, corners_, (21, 21), (-1, -1), criteria)
                 cols, rows = pattern_size_corrected
 
@@ -835,9 +805,12 @@ def solve_chess_size(image, name,pattern_size,pattern_size2,second=False):
                     bottom_right,
                     bottom_left
                 ], dtype=np.float32)
+
+                #dodaj pierwsze i drugie do siebie i narysuj punkty też
                 corners_combined = np.concatenate((corners_4, corners_4_), axis=0)
                 img2_draw = cv.drawChessboardCorners(img_draw,pattern_size_corrected, corners_, ret_)
                 top_left_min_ = min(corners_4_, key=lambda x: (x[0][0], x[0][1]))  # Pierwszy element to współrzędne x,y
+                # narysuj punkt skrajny, od którego liczy się wszystkie narożniki - dla debugowania kolejności
                 cv.circle(img2_draw, (int(top_left_min_[0][0]), int(top_left_min_[0][1])), 20, (0, 0, 255), -1)
                 cv.namedWindow(f"detected corners {name}", cv.WINDOW_NORMAL)
                 cv.imshow(f"detected corners {name}", img2_draw)
