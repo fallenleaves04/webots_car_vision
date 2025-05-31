@@ -1,4 +1,4 @@
-# webots_car_vision
+# Symulacja samochodu w symulatorze Webots
 ## Funkcjonalność projektu
 
  W danym projekcie realizuje się system percepcji samochodu autonomicznego, zawierający obsługę czujników ultradzwiękowych oraz układ z 6 kamer widoku 360°. 
